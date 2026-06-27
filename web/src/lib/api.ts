@@ -153,6 +153,56 @@ const leaderboard: LeaderboardRow[] = [
   { rank: 4, name: 'Kamil', avatar: '🏃', points: 134 },
 ]
 
+// ── Wariant korporacyjny (B2B) ────────────────────────────
+export interface TeamToday {
+  company: string
+  teamName: string
+  members: number
+  steps: number
+  points: number
+  rewardTitle: string
+  rewardProgress: number
+  teamMultiplier: number
+}
+
+export interface TeamRow {
+  rank: number
+  team: string
+  points: number
+  members: number
+  isMine?: boolean
+}
+
+const teamToday: TeamToday = {
+  company: 'Northwind',
+  teamName: 'Zespół Marketing',
+  members: 8,
+  steps: 48210,
+  points: 1240,
+  rewardTitle: 'Dzień wolny dla zespołu',
+  rewardProgress: 64,
+  teamMultiplier: 2,
+}
+
+const teamLeaderboard: TeamRow[] = [
+  { rank: 1, team: 'Sprzedaż', points: 1880, members: 11 },
+  { rank: 2, team: 'Marketing', points: 1240, members: 8, isMine: true },
+  { rank: 3, team: 'IT', points: 1120, members: 14 },
+  { rank: 4, team: 'HR', points: 760, members: 5 },
+]
+
+const corporateEvents: EventItem[] = [
+  { id: 'ce1', title: 'Spacer integracyjny działu', type: 'social', date: 'Śr 02.07 • 15:00', place: 'Bulwar Nadmorski', peopleCount: 8, points: 160 },
+  { id: 'ce2', title: 'Firmowe sprzątanie plaży (CSR)', type: 'cleanup', date: 'Sob 05.07 • 10:00', place: 'Plaża Stogi', peopleCount: 22, points: 300 },
+  { id: 'ce3', title: 'Sadzenie drzew — las firmowy', type: 'planting', date: 'Nd 13.07 • 11:00', place: 'TPK Dolina Radości', peopleCount: 16, points: 400 },
+]
+
+const teamRewards: Reward[] = [
+  { id: 'tr1', title: 'Dzień wolny dla zespołu', kind: 'Nagroda firmowa', icon: '🏖️', progress: 64 },
+  { id: 'tr2', title: 'Budżet na integrację', kind: 'Nagroda firmowa', icon: '🎉', progress: 40 },
+  { id: 'tr3', title: 'Dzień wellbeing', kind: 'Nagroda firmowa', icon: '🧘', progress: 28 },
+]
+
 // symulacja opóźnienia sieci, żeby UI był „prawdziwy"
 const wait = <T>(data: T, ms = 150): Promise<T> =>
   new Promise((res) => setTimeout(() => res(data), ms))
@@ -165,4 +215,9 @@ export const api = {
   getRewards: () => wait(rewards),
   getEcoReports: () => wait(ecoReports),
   getLeaderboard: () => wait(leaderboard),
+  // wariant korporacyjny
+  getTeamToday: () => wait(teamToday),
+  getTeamLeaderboard: () => wait(teamLeaderboard),
+  getCorporateEvents: () => wait(corporateEvents),
+  getTeamRewards: () => wait(teamRewards),
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { MapPin, CalendarDays, Users } from 'lucide-react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
+import { useMode } from '../lib/mode'
 import { api, type EventItem, type EventType } from '../lib/api'
 
 const typeMeta: Record<EventType, { emoji: string; label: string; tone: 'sea' | 'leaf' | 'sand' }> = {
@@ -12,16 +13,22 @@ const typeMeta: Record<EventType, { emoji: string; label: string; tone: 'sea' | 
 }
 
 export function Events() {
+  const { mode } = useMode()
+  const isTeam = mode === 'team'
   const [events, setEvents] = useState<EventItem[]>([])
   const [joined, setJoined] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    api.getEvents().then(setEvents)
-  }, [])
+    ;(isTeam ? api.getCorporateEvents() : api.getEvents()).then(setEvents)
+  }, [isTeam])
 
   return (
     <div>
-      <ScreenHeader title="Eventy" emoji="🌍" subtitle="Akcje społeczne i eko dla Trójmiasta i Bałtyku." />
+      <ScreenHeader
+        title={isTeam ? 'Eventy firmowe' : 'Eventy'}
+        emoji="🌍"
+        subtitle={isTeam ? 'Integracja, CSR i akcje eko dla zespołów.' : 'Akcje społeczne i eko dla Trójmiasta i Bałtyku.'}
+      />
 
       <div className="space-y-3 px-5 pt-2">
         {events.map((e, i) => {
