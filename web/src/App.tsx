@@ -1,5 +1,6 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Outlet } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { Login } from './screens/Login'
 import { Home } from './screens/Home'
 import { Walk } from './screens/Walk'
 import { Community } from './screens/Community'
@@ -10,11 +11,23 @@ import { History } from './screens/History'
 import { Partners } from './screens/Partners'
 import { MagicVerify } from './screens/MagicVerify'
 
-/** Apka otwiera się od razu w środku (logowanie jest na landingu, nie tutaj). */
-function App() {
+/** Layout apki — responsywny shell (sidebar/bottom-nav). */
+function AppLayout() {
   return (
     <AppShell>
-      <Routes>
+      <Outlet />
+    </AppShell>
+  )
+}
+
+function App() {
+  return (
+    <Routes>
+      {/* logowanie / zakładanie konta — pełny ekran, bez shellu */}
+      <Route path="/login" element={<Login />} />
+
+      {/* aplikacja */}
+      <Route element={<AppLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/walk" element={<Walk />} />
         <Route path="/auth/magic" element={<MagicVerify />} />
@@ -25,8 +38,8 @@ function App() {
         <Route path="/partners" element={<Partners />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Home />} />
-      </Routes>
-    </AppShell>
+      </Route>
+    </Routes>
   )
 }
 

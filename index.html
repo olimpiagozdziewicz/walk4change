@@ -135,7 +135,7 @@
   <div class="wrap">
     <nav class="nav">
       <span class="brand"><span class="mark"></span><span class="word">Sea<span class="s">Steps</span></span></span>
-      <a class="btn btn-ghost" data-app href="#">Zaloguj się</a>
+      <a class="btn btn-ghost" data-login href="#">Zaloguj się</a>
     </nav>
 
     <!-- HERO -->
@@ -238,12 +238,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     var APP_URL = "https://web-alpha-three-89.vercel.app/";
+    var LOGIN_URL = APP_URL.replace(/\/$/, "") + "/login";
     var SUPABASE_URL = "https://vjsjxdqnmhyrglsfqvvp.supabase.co";
     var SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqc2p4ZHFubWh5cmdsc2ZxdnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDAxODIsImV4cCI6MjA5ODA3NjE4Mn0.LtUG8kIIeNPrqN9wKw-mhra0EmQMyo21FFRQ0F8wDz4";
     var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-    /* "Zaloguj się" / plain CTA links -> open the app. */
+    /* CTA links -> app; "Zaloguj się" links -> /login page. */
     document.querySelectorAll("[data-app]").forEach(function (a) { a.setAttribute("href", APP_URL); });
+    document.querySelectorAll("[data-login]").forEach(function (a) { a.setAttribute("href", LOGIN_URL); });
 
     /* Magic-link forms: send a Supabase magic link (returns to the app /auth/magic). */
     document.querySelectorAll(".ml").forEach(function (form) {

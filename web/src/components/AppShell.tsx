@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
+import { InstallModal } from './InstallModal'
 
 /**
  * Responsywny shell aplikacji:
@@ -20,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
         <BottomNav />
       </div>
+      <InstallModal />
     </div>
   )
 }
