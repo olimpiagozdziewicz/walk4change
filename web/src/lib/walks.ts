@@ -6,6 +6,7 @@ export interface SavedWalk {
   points: number
   withSomeone: boolean
   inNature: boolean
+  withDog?: boolean
   place: string
   routeSeed: number
   /** emoji (placeholder) albo data:/http URL zdjęcia */
@@ -35,9 +36,22 @@ const sample: SavedWalk[] = [
     points: 74,
     withSomeone: false,
     inNature: true,
+    withDog: true,
     place: 'Plaża Brzeźno',
     routeSeed: 1390,
     photos: ['🌊'],
+  },
+  {
+    id: 's3',
+    dateLabel: 'Sob • 16:20',
+    durationSec: 2310,
+    steps: 4480,
+    points: 96,
+    withSomeone: false,
+    inNature: true,
+    place: 'Bulwar Nadmorski, Gdynia',
+    routeSeed: 7720,
+    photos: [],
   },
 ]
 

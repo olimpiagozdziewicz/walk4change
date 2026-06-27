@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { Play, Square, UsersThree, Leaf, Trophy, Camera, Check, ClockCounterClockwise, Footprints, PersonSimpleWalk, HandHeart } from '@phosphor-icons/react'
+import { Play, Square, UsersThree, Leaf, Trophy, Camera, Check, ClockCounterClockwise, Footprints, PersonSimpleWalk, HandHeart, PawPrint, Lightbulb } from '@phosphor-icons/react'
 import { ScreenHeader, Card, PrimaryButton, SoftButton, Pill } from '../components/ui'
 import { FootstepTrail } from '../components/Footsteps'
+import { Celebrate } from '../components/Celebrate'
 import { computeWalkPoints } from '../lib/api'
 import { addWalk } from '../lib/walks'
 
 const PLACES = ['Bulwar Nadmorski', 'Plaża Brzeźno', 'Park Oliwski', 'Molo w Orłowie', 'Plaża Stogi']
+
+const PLACE_FACTS: Record<string, string> = {
+  'Bulwar Nadmorski': 'Gdyński bulwar ma ok. 1,5 km i jest jednym z ulubionych miejsc na zachód słońca nad Zatoką.',
+  'Plaża Brzeźno': 'Molo w Brzeźnie ma 136 m długości, a plaża to siedlisko rzadkich ptaków siewkowych.',
+  'Park Oliwski': 'Park Oliwski powstał w XVIII w. i kryje ponad 130 gatunków drzew i krzewów.',
+  'Molo w Orłowie': 'Drewniane molo w Orłowie z 1934 r. to jedno z najbardziej malowniczych miejsc Trójmiasta.',
+  'Plaża Stogi': 'Stogi to jedna z najszerszych plaż Gdańska — szeroka na ponad 100 m miejscami.',
+}
+const factFor = (place: string) => PLACE_FACTS[place] ?? 'Bałtyk to jedno z najmłodszych mórz świata — ma ok. 12 tys. lat.'
 
 type Phase = 'idle' | 'active' | 'summary'
 
@@ -24,6 +34,8 @@ export function Walk() {
   const [steps, setSteps] = useState(0)
   const [withSomeone, setWithSomeone] = useState(false)
   const [inNature, setInNature] = useState(true)
+  const [withDog, setWithDog] = useState(false)
+  const [place, setPlace] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const timer = useRef<number | null>(null)
@@ -50,6 +62,7 @@ export function Walk() {
   }
   const stop = () => {
     if (timer.current) window.clearInterval(timer.current)
+    setPlace(PLACES[Math.floor(Math.random() * PLACES.length)])
     setPhase('summary')
   }
   const reset = () => {
@@ -77,7 +90,8 @@ export function Walk() {
       points: total,
       withSomeone,
       inNature,
-      place: PLACES[Math.floor(Math.random() * PLACES.length)],
+      withDog,
+      place: place || PLACES[0],
       routeSeed: Math.floor(Math.random() * 100000),
       photos,
     })
@@ -114,7 +128,7 @@ export function Walk() {
                 </div>
               </Card>
 
-              <ToggleRow withSomeone={withSomeone} setWithSomeone={setWithSomeone} inNature={inNature} setInNature={setInNature} />
+              <ToggleRow withSomeone={withSomeone} setWithSomeone={setWithSomeone} inNature={inNature} setInNature={setInNature} withDog={withDog} setWithDog={setWithDog} />
 
               <PrimaryButton onClick={start} className="mt-5 w-full py-4 text-base">
                 <Play size={20} weight="fill" color="white" /> Rozpocznij spacer
@@ -156,7 +170,7 @@ export function Walk() {
                 )}
               </Card>
 
-              <ToggleRow withSomeone={withSomeone} setWithSomeone={setWithSomeone} inNature={inNature} setInNature={setInNature} />
+              <ToggleRow withSomeone={withSomeone} setWithSomeone={setWithSomeone} inNature={inNature} setInNature={setInNature} withDog={withDog} setWithDog={setWithDog} />
 
               <button
                 onClick={stop}
@@ -170,6 +184,7 @@ export function Walk() {
           {/* ── SUMMARY ── */}
           {phase === 'summary' && (
             <motion.div key="summary" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+              <Celebrate />
               <Card className="mt-2 overflow-hidden p-6 text-center">
                 <motion.div
                   initial={{ scale: 0, rotate: -20 }}
@@ -198,6 +213,26 @@ export function Walk() {
                   <HandHeart size={16} weight="fill" /> Jesteś coraz bliżej adopcji foki!
                 </p>
               </Card>
+
+              {/* ciekawostka o miejscu */}
+              <Card className="mt-4 flex items-start gap-3 p-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sand/25 text-[#c8761b]">
+                  <Lightbulb size={18} weight="fill" />
+                </span>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-muted">Czy wiesz, że… • {place}</div>
+                  <p className="mt-0.5 text-sm leading-snug text-ink">{factFor(place)}</p>
+                </div>
+              </Card>
+
+              {/* dodatkowe bonusy */}
+              {withDog && (
+                <div className="mt-3 flex justify-center">
+                  <Pill tone="leaf">
+                    <PawPrint size={12} /> spacer z psem
+                  </Pill>
+                </div>
+              )}
 
               {/* zdjęcia z trasy */}
               <div className="mt-4">
@@ -244,16 +279,21 @@ function ToggleRow({
   setWithSomeone,
   inNature,
   setInNature,
+  withDog,
+  setWithDog,
 }: {
   withSomeone: boolean
   setWithSomeone: (v: boolean) => void
   inNature: boolean
   setInNature: (v: boolean) => void
+  withDog: boolean
+  setWithDog: (v: boolean) => void
 }) {
   return (
-    <div className="mt-4 grid grid-cols-2 gap-3">
-      <Toggle active={inNature} onClick={() => setInNature(!inNature)} icon={<Leaf size={18} />} label="W naturze" hint="×3" />
-      <Toggle active={withSomeone} onClick={() => setWithSomeone(!withSomeone)} icon={<UsersThree size={18} />} label="Z kimś" hint="×1.5" />
+    <div className="mt-4 grid grid-cols-3 gap-2.5">
+      <Toggle active={inNature} onClick={() => setInNature(!inNature)} icon={<Leaf size={20} />} label="Natura" hint="×3" />
+      <Toggle active={withSomeone} onClick={() => setWithSomeone(!withSomeone)} icon={<UsersThree size={20} />} label="Z kimś" hint="×1.5" />
+      <Toggle active={withDog} onClick={() => setWithDog(!withDog)} icon={<PawPrint size={20} />} label="Z psem" />
     </div>
   )
 }
@@ -269,21 +309,21 @@ function Toggle({
   onClick: () => void
   icon: ReactNode
   label: string
-  hint: string
+  hint?: string
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-left text-sm font-bold transition active:scale-[0.97] ${
+      className={`flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-xs font-bold transition active:scale-95 ${
         active ? 'bg-gradient-to-br from-leaf/20 to-sea/15 text-deep ring-1 ring-leaf/40' : 'glass text-muted'
       }`}
     >
       <span className={`grid h-9 w-9 place-items-center rounded-full ${active ? 'bg-white text-leaf' : 'bg-white/60 text-muted'}`}>
         {icon}
       </span>
-      <span className="flex-1">
+      <span>
         {label}
-        <span className="ml-1 text-xs opacity-70">{hint}</span>
+        {hint && <span className="ml-0.5 opacity-70">{hint}</span>}
       </span>
     </button>
   )

@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { Camera, MapPin, PaperPlaneTilt, CheckCircle, Warning, Sparkle, Leaf } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
+import { Celebrate } from '../components/Celebrate'
 import { api, type EcoReport, type Reward } from '../lib/api'
 
 const statusMeta: Record<EcoReport['status'], { label: string; tone: 'leaf' | 'sand' | 'sea' }> = {
@@ -62,8 +63,9 @@ export function Eco() {
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center py-4 text-center"
+              className="relative flex flex-col items-center py-4 text-center"
             >
+              <Celebrate pieces={28} />
               <CheckCircle size={48} className="text-leaf" />
               {tab === 'report' ? (
                 <>

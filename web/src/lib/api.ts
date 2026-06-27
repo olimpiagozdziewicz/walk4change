@@ -186,7 +186,7 @@ const people: MatchPerson[] = [
 ]
 
 // ── Lokalni partnerzy / sponsorzy ─────────────────────────
-export type SponsorIconKey = 'boat' | 'sup' | 'bike' | 'coffee' | 'sail'
+export type SponsorIconKey = 'boat' | 'sup' | 'bike' | 'coffee' | 'sail' | 'food' | 'icecream'
 
 export interface Sponsor {
   id: string
@@ -204,6 +204,8 @@ const sponsors: Sponsor[] = [
   { id: 'sp3', name: 'Rowery Nadmorskie', category: 'Wypożyczalnia rowerów', offer: '−15% na dzień', pointsCost: 80, iconKey: 'bike', place: 'Bulwar Nadmorski' },
   { id: 'sp4', name: 'Przystań Kawa', category: 'Kawiarnia nad wodą', offer: 'Kawa −50%', pointsCost: 60, iconKey: 'coffee', place: 'Brzeźno' },
   { id: 'sp5', name: 'Szkoła Żeglarstwa', category: 'Rejsy i lekcje', offer: 'Lekcja próbna −30%', pointsCost: 200, iconKey: 'sail', place: 'Górki Zachodnie' },
+  { id: 'sp6', name: 'Bar Przystań', category: 'Smażalnia ryb nad wodą', offer: '−15% na obiad', pointsCost: 100, iconKey: 'food', place: 'Sopot, molo' },
+  { id: 'sp7', name: 'Lody Bałtyk', category: 'Lodziarnia rzemieślnicza', offer: '2 gałki w cenie 1', pointsCost: 50, iconKey: 'icecream', place: 'Gdynia, bulwar' },
 ]
 
 // ── Wariant korporacyjny (B2B) ────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Clock, Footprints, MapPin, Leaf, UsersThree, Plus, MapTrifold } from '@phosphor-icons/react'
+import { Clock, Footprints, MapPin, Leaf, UsersThree, Plus, MapTrifold, Star, PawPrint } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
 import { RouteMap } from '../components/RouteMap'
 import { getWalks, type SavedWalk } from '../lib/walks'
@@ -29,6 +29,14 @@ export function History() {
     setWalks(getWalks())
   }, [])
 
+  // auto-ulubione: miejsca odwiedzone ≥2 razy
+  const counts = walks.reduce<Record<string, number>>((m, w) => {
+    m[w.place] = (m[w.place] || 0) + 1
+    return m
+  }, {})
+  const favorites = Object.keys(counts).filter((p) => counts[p] >= 2)
+  const favSet = new Set(favorites)
+
   return (
     <div>
       <ScreenHeader title="Moje spacery" icon={<MapTrifold size={22} />} subtitle="Twoje trasy, punkty i zdjęcia z drogi." />
@@ -38,6 +46,21 @@ export function History() {
           <Plus size={18} /> Nowy spacer
         </PrimaryButton>
 
+        {favorites.length > 0 && (
+          <div>
+            <h2 className="mb-2 flex items-center gap-2 font-display text-base font-bold text-ink">
+              <Star size={16} weight="fill" className="text-sand" /> Ulubione miejsca
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {favorites.map((p) => (
+                <span key={p} className="inline-flex items-center gap-1.5 rounded-full bg-sand/20 px-3 py-1.5 text-xs font-bold text-[#8a6418]">
+                  <Star size={12} weight="fill" /> {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {walks.map((w, i) => (
           <motion.div key={w.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
             <Card className="overflow-hidden">
@@ -45,7 +68,10 @@ export function History() {
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-display text-lg font-bold leading-tight text-ink">{w.place}</div>
+                    <div className="flex items-center gap-1.5 font-display text-lg font-bold leading-tight text-ink">
+                      {w.place}
+                      {favSet.has(w.place) && <Star size={15} weight="fill" className="text-sand" />}
+                    </div>
                     <div className="text-xs font-bold text-muted">{w.dateLabel}</div>
                   </div>
                   <span className="font-display text-xl font-bold text-sea">+{w.points}</span>
@@ -63,7 +89,7 @@ export function History() {
                   </span>
                 </div>
 
-                {(w.inNature || w.withSomeone) && (
+                {(w.inNature || w.withSomeone || w.withDog) && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {w.inNature && (
                       <Pill tone="leaf">
@@ -73,6 +99,11 @@ export function History() {
                     {w.withSomeone && (
                       <Pill tone="sea">
                         <UsersThree size={12} /> z kimś ×1.5
+                      </Pill>
+                    )}
+                    {w.withDog && (
+                      <Pill tone="sand">
+                        <PawPrint size={12} /> z psem
                       </Pill>
                     )}
                   </div>
