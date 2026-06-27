@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use walk4change_api::{config::AppConfig, db, router_health, state::AppState};
+use walk4change_api::{build_app, config::AppConfig, db, state::AppState};
 
 #[tokio::main]
 async fn main() {
@@ -20,13 +20,13 @@ async fn main() {
         .expect("migrations failed");
 
     let bind_addr = config.bind_addr.clone();
-    let _state = AppState {
+    let state = AppState {
         pool,
         config: Arc::new(config),
         hub: (),
     };
 
-    let app = router_health();
+    let app = build_app(state);
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|_| panic!("failed to bind to {bind_addr}"));

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::net::TcpListener;
 use uuid::Uuid;
-use walk4change_api::{auth::jwt, config::AppConfig, db, router, state::AppState};
+use walk4change_api::{auth::jwt, build_app, config::AppConfig, db, state::AppState};
 
 /// Shared test app handle.
 ///
@@ -83,7 +83,7 @@ pub async fn spawn() -> TestApp {
         hub: (),
     };
 
-    let app = router(state);
+    let app = build_app(state);
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("failed to bind ephemeral port");

@@ -1,7 +1,9 @@
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
+use tower_http::trace::TraceLayer;
 
 pub mod auth;
 pub mod config;
@@ -17,13 +19,23 @@ pub mod state;
 use auth::extractor::AuthUser;
 use state::AppState;
 
-/// Minimal router used in unit tests that do not need application state.
+/// Maximum request body size (64 KiB).
+const MAX_BODY_BYTES: usize = 65_536;
+
+/// Minimal, stateless router for unit tests that do not need [`AppState`].
+///
+/// Only the `/api/v1/health` endpoint is mounted.  Use [`build_app`] for
+/// all integration-test and production serving scenarios.
 pub fn router_health() -> Router {
     Router::new().route("/api/v1/health", get(|| async { "ok" }))
 }
 
-/// Full application router backed by [`AppState`].
-pub fn router(state: AppState) -> Router {
+/// Single canonical application builder.
+///
+/// Combines all routes (health, _whoami, auth, profile) and applies baseline
+/// middleware: HTTP tracing via [`TraceLayer`] and a [`DefaultBodyLimit`] of
+/// [`MAX_BODY_BYTES`] bytes.
+pub fn build_app(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(|| async { "ok" }))
         .route("/api/v1/_whoami", get(whoami))
@@ -35,6 +47,8 @@ pub fn router(state: AppState) -> Router {
             get(routes::profile::get_me).patch(routes::profile::patch_me),
         )
         .with_state(state)
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(TraceLayer::new_for_http())
 }
 
 async fn whoami(auth: AuthUser) -> axum::Json<serde_json::Value> {
