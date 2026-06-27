@@ -19,8 +19,13 @@ async fn seed_creates_demo_data_and_is_idempotent() {
         result.user_ids.len()
     );
 
-    // At least one accepted friendship exists.
-    let friendship_count: i64 = sqlx::query_scalar(
+    // Capture counts after first run for idempotency check.
+    let user_count1: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&app.pool)
+        .await
+        .expect("query user count");
+
+    let friendship_count1: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM friendships WHERE status = 'accepted'",
     )
     .fetch_one(&app.pool)
@@ -28,36 +33,36 @@ async fn seed_creates_demo_data_and_is_idempotent() {
     .expect("query friendships");
 
     assert!(
-        friendship_count >= 1,
+        friendship_count1 >= 1,
         "at least 1 accepted friendship must exist after seed"
     );
 
     // At least one active nature zone exists.
-    let zone_count: i64 =
+    let zone_count1: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM nature_zones WHERE active = true")
             .fetch_one(&app.pool)
             .await
             .expect("query nature_zones");
 
     assert!(
-        zone_count >= 1,
+        zone_count1 >= 1,
         "at least 1 active nature_zone must exist after seed, got {}",
-        zone_count
+        zone_count1
     );
-    assert_eq!(result.zone_count, zone_count as u32, "SeedResult.zone_count must match DB");
+    assert_eq!(result.zone_count, zone_count1 as u32, "SeedResult.zone_count must match DB");
 
-    // At least one reward exists.
-    let reward_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rewards_catalog")
+    // At least three rewards (discount, eco, sponsor spec).
+    let reward_count1: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rewards_catalog")
         .fetch_one(&app.pool)
         .await
         .expect("query rewards_catalog");
 
     assert!(
-        reward_count >= 1,
-        "at least 1 reward must exist after seed, got {}",
-        reward_count
+        reward_count1 >= 3,
+        "at least 3 rewards (discount/eco/sponsor) must exist after seed, got {}",
+        reward_count1
     );
-    assert_eq!(result.reward_count, reward_count as u32, "SeedResult.reward_count must match DB");
+    assert_eq!(result.reward_count, reward_count1 as u32, "SeedResult.reward_count must match DB");
 
     // ── Idempotency: second run must not error or duplicate ──────────────────
     let result2 = seed::run(&app.pool, &cfg)
@@ -69,10 +74,23 @@ async fn seed_creates_demo_data_and_is_idempotent() {
         .await
         .expect("user count after second run");
 
-    let user_count1 = result.user_ids.len() as i64;
     assert_eq!(
         user_count2, user_count1,
-        "second seed run must not add new users"
+        "second seed run must not add new users; expected {} but got {}",
+        user_count1, user_count2
+    );
+
+    let friendship_count2: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM friendships WHERE status = 'accepted'",
+    )
+    .fetch_one(&app.pool)
+    .await
+    .expect("friendship count after second run");
+
+    assert_eq!(
+        friendship_count2, friendship_count1,
+        "second seed run must not add new friendships; expected {} but got {}",
+        friendship_count1, friendship_count2
     );
 
     let zone_count2: i64 =
@@ -81,7 +99,7 @@ async fn seed_creates_demo_data_and_is_idempotent() {
             .await
             .expect("zone count after second run");
 
-    assert_eq!(zone_count2, zone_count, "second seed run must not add more zones");
+    assert_eq!(zone_count2, zone_count1, "second seed run must not add more zones");
     assert_eq!(result2.zone_count, result.zone_count, "zone_count must be stable");
 
     let reward_count2: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rewards_catalog")
@@ -89,6 +107,6 @@ async fn seed_creates_demo_data_and_is_idempotent() {
         .await
         .expect("reward count after second run");
 
-    assert_eq!(reward_count2, reward_count, "second seed run must not add more rewards");
+    assert_eq!(reward_count2, reward_count1, "second seed run must not add more rewards");
     assert_eq!(result2.reward_count, result.reward_count, "reward_count must be stable");
 }
