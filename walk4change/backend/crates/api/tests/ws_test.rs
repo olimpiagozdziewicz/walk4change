@@ -213,6 +213,77 @@ async fn subscribed_member_receives_other_participants_ping() {
     assert_eq!(frame["type"], "ping_scored", "got {frame:?}");
 }
 
+/// After a scored ping, the `leaderboard_update` broadcast carries an ARRAY
+/// whose elements have `user_id`, `display_name`, and `total_points`.
+#[tokio::test]
+async fn leaderboard_update_has_array_shape() {
+    let app = common::spawn().await;
+    let (_, token) = register_user(&app, "ws_lb_shape@example.com").await;
+    let session_id = start_walk(&app, &token).await;
+
+    // Subscribe to leaderboard on a dedicated connection.
+    let mut sub = connect_ws(&app).await;
+    send_json(&mut sub, serde_json::json!({ "type": "auth", "token": token })).await;
+    send_json(&mut sub, serde_json::json!({ "type": "subscribe_leaderboard" })).await;
+
+    // Allow the subscription to register before the ping fires.
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    // Trigger a ping from a separate connection (host is an active participant).
+    let mut pinger = connect_ws(&app).await;
+    send_json(&mut pinger, serde_json::json!({ "type": "auth", "token": token })).await;
+    send_json(
+        &mut pinger,
+        ping_frame(session_id, 1, 52.0, 21.0),
+    )
+    .await;
+
+    // Drain frames on `sub` until we see a leaderboard_update (bounded wait).
+    // The subscriber is only subscribed to the leaderboard channel, so all
+    // frames it receives should be leaderboard_update.
+    let mut received: Option<serde_json::Value> = None;
+    for _ in 0..10 {
+        match next_json(&mut sub).await {
+            Some(v) if v["type"] == "leaderboard_update" => {
+                received = Some(v);
+                break;
+            }
+            Some(_) => continue,
+            None => break,
+        }
+    }
+
+    let frame = received.expect("must receive a leaderboard_update frame within the timeout");
+
+    let data = &frame["data"];
+    assert!(
+        data.is_array(),
+        "leaderboard_update data must be a JSON array, got: {frame:?}"
+    );
+
+    // If the array is non-empty (it will have at least the pinging user's row
+    // since score_ping upserts user_totals even on first/zero-point ping),
+    // verify the entry shape.
+    let entries = data.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "leaderboard array must contain at least the active user's entry"
+    );
+    let entry = &entries[0];
+    assert!(
+        entry.get("user_id").is_some(),
+        "entry must have user_id, got: {entry:?}"
+    );
+    assert!(
+        entry.get("display_name").is_some(),
+        "entry must have display_name, got: {entry:?}"
+    );
+    assert!(
+        entry.get("total_points").is_some(),
+        "entry must have total_points, got: {entry:?}"
+    );
+}
+
 /// Subscribing to a session you are not a member of → error frame.
 #[tokio::test]
 async fn subscribe_non_member_session_yields_error() {

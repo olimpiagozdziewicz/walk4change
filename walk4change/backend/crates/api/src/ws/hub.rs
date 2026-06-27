@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -7,9 +8,14 @@ use crate::ws::protocol::ServerFrame;
 
 const CHANNEL_CAPACITY: usize = 256;
 
+/// Minimum interval between leaderboard publishes (global, across all connections).
+const LEADERBOARD_MIN_INTERVAL: Duration = Duration::from_millis(500);
+
 struct HubInner {
     sessions: Mutex<HashMap<Uuid, broadcast::Sender<ServerFrame>>>,
     leaderboard: broadcast::Sender<ServerFrame>,
+    /// Wall-clock instant of the last leaderboard publish for global throttling.
+    last_leaderboard: Mutex<Option<Instant>>,
 }
 
 /// Broadcast hub for WebSocket push messages.
@@ -30,6 +36,7 @@ impl Hub {
             inner: Arc::new(HubInner {
                 sessions: Mutex::new(HashMap::new()),
                 leaderboard: leaderboard_tx,
+                last_leaderboard: Mutex::new(None),
             }),
         }
     }
@@ -69,6 +76,27 @@ impl Hub {
     /// Publish `frame` to all leaderboard subscribers.
     pub fn publish_leaderboard(&self, frame: ServerFrame) {
         let _ = self.inner.leaderboard.send(frame);
+    }
+
+    /// Check the global leaderboard throttle.
+    ///
+    /// Returns `true` and records the current time if at least
+    /// [`LEADERBOARD_MIN_INTERVAL`] has elapsed since the last publish.
+    /// Returns `false` if the minimum interval has not yet elapsed.
+    ///
+    /// This is a sync, lock-based check intentionally: it is cheap and prevents
+    /// multiple concurrent handlers from all firing a DB query for the same
+    /// leaderboard snapshot.
+    pub fn should_publish_leaderboard(&self) -> bool {
+        let mut guard = self.inner.last_leaderboard.lock().unwrap();
+        let now = Instant::now();
+        let allow = guard
+            .map(|prev| now.duration_since(prev) >= LEADERBOARD_MIN_INTERVAL)
+            .unwrap_or(true);
+        if allow {
+            *guard = Some(now);
+        }
+        allow
     }
 }
 

@@ -30,11 +30,11 @@ use futures_util::{
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
-use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::{
     repo::walk,
+    routes::leaderboard::top_n,
     scoring::repo::{score_ping, PingInput},
     state::AppState,
     ws::protocol::{ClientFrame, ServerFrame},
@@ -45,10 +45,6 @@ const WS_AUTH_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum accepted size of a single inbound text frame (16 KiB).
 const MAX_WS_FRAME_BYTES: usize = 16 * 1024;
-
-/// Minimum spacing between leaderboard publishes for a single connection
-/// (≤2 publishes/sec).
-const LEADERBOARD_THROTTLE: Duration = Duration::from_millis(500);
 
 /// Axum entry point: upgrade the connection and hand off to [`handle_socket`].
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -70,7 +66,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let mut subscriptions: HashSet<Uuid> = HashSet::new();
     let mut leaderboard_subscribed = false;
     let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
-    let mut last_leaderboard: Option<Instant> = None;
 
     loop {
         tokio::select! {
@@ -139,7 +134,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             &out_tx,
                             &mut subscriptions,
                             &mut forwarders,
-                            &mut last_leaderboard,
                         )
                         .await;
                     }
@@ -263,7 +257,6 @@ async fn handle_ping(
     out_tx: &mpsc::UnboundedSender<ServerFrame>,
     subscriptions: &mut HashSet<Uuid>,
     forwarders: &mut Vec<JoinHandle<()>>,
-    last_leaderboard: &mut Option<Instant>,
 ) {
     // Authz: only an active participant may submit pings for this session.
     match walk::is_active_participant(&state.pool, session_id, actor).await {
@@ -330,19 +323,21 @@ async fn handle_ping(
     };
     state.hub.publish_session(session_id, ping_frame);
 
-    // Throttled leaderboard nudge (full leaderboard query is Task 16).
-    let now = Instant::now();
-    let allow = last_leaderboard
-        .map(|prev| now.duration_since(prev) >= LEADERBOARD_THROTTLE)
-        .unwrap_or(true);
-    if allow {
-        *last_leaderboard = Some(now);
-        state.hub.publish_leaderboard(ServerFrame::LeaderboardUpdate {
-            data: serde_json::json!({
-                "user_id": actor,
-                "total_points": score.participant_total,
-            }),
-        });
+    // Global leaderboard throttle: at most once per 500 ms across all connections.
+    // The throttle check is sync; the DB query only runs when the slot is reserved.
+    if state.hub.should_publish_leaderboard() {
+        match top_n(&state.pool, 10).await {
+            Ok(entries) => {
+                let data =
+                    serde_json::to_value(&entries).unwrap_or_else(|_| serde_json::json!([]));
+                state
+                    .hub
+                    .publish_leaderboard(ServerFrame::LeaderboardUpdate { data });
+            }
+            Err(_) => {
+                // Non-fatal: scoring already succeeded; skip the leaderboard push.
+            }
+        }
     }
 }
 

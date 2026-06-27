@@ -15,6 +15,7 @@ pub mod response;
 pub mod routes;
 pub mod scoring;
 pub mod state;
+pub mod util;
 pub mod ws;
 
 use auth::extractor::AuthUser;
@@ -56,6 +57,10 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/walks/:id/leave", post(routes::walks::leave_walk))
         .route("/api/v1/walks/:id/stop", post(routes::walks::stop_walk))
         .route("/api/v1/walks/:id/track", get(routes::walks::track_walk))
+        .route(
+            "/api/v1/leaderboard",
+            get(routes::leaderboard::get_leaderboard),
+        )
         .route("/api/v1/ws", get(ws::handler::ws_handler))
         .with_state(state)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
