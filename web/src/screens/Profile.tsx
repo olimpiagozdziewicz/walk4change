@@ -104,7 +104,7 @@ export function Profile() {
 
         {/* stats */}
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <StatCard icon={<Footprints size={22} />} value={p.stats.walks} label="spacerów" />
+          <StatCard icon={<Footprints size={22} />} value={p.stats.walks} label="spacerów" onClick={() => nav('/history')} />
           <StatCard icon={<CalendarHeart size={22} />} value={p.stats.events} label="eventów" />
           <StatCard icon={<Recycle size={22} />} value={p.stats.ecoReports} label="eko-zgłoszeń" />
         </div>
@@ -126,9 +126,9 @@ export function Profile() {
   )
 }
 
-function StatCard({ icon, value, label }: { icon: ReactNode; value: number; label: string }) {
+function StatCard({ icon, value, label, onClick }: { icon: ReactNode; value: number; label: string; onClick?: () => void }) {
   return (
-    <Card className="p-4 text-center">
+    <Card className="p-4 text-center" onClick={onClick}>
       <div className="mx-auto mb-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-sea/10 text-sea">{icon}</div>
       <div className="font-display text-2xl font-bold text-deep">{value}</div>
       <div className="text-[11px] font-bold text-muted">{label}</div>

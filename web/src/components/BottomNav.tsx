@@ -23,10 +23,10 @@ export function BottomNav() {
             <>
               <span
                 className={`flex h-9 w-12 items-center justify-center rounded-full transition ${
-                  isActive ? 'bg-gradient-to-br from-sea to-leaf text-white shadow-[0_8px_18px_rgba(15,139,141,0.35)]' : 'text-muted group-active:bg-sea/10'
+                  isActive ? 'bg-gradient-to-br from-sea to-leaf text-white shadow-[0_8px_18px_rgba(15,139,141,0.35)]' : 'text-sea/55 group-active:bg-sea/10'
                 }`}
               >
-                <Icon size={23} weight={isActive ? 'fill' : 'duotone'} />
+                <Icon size={22} weight={isActive ? 'fill' : 'bold'} />
               </span>
               <span className={`text-[11px] font-bold ${isActive ? 'text-deep' : 'text-muted'}`}>{label}</span>
             </>

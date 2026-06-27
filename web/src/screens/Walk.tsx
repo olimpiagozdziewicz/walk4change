@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { Play, Square, UsersThree, Leaf, Trophy, ArrowRight } from '@phosphor-icons/react'
+import { Play, Square, UsersThree, Leaf, Trophy, Camera, Check, ClockCounterClockwise } from '@phosphor-icons/react'
 import { ScreenHeader, Card, PrimaryButton, SoftButton, Pill } from '../components/ui'
 import { FootstepTrail } from '../components/Footsteps'
 import { computeWalkPoints } from '../lib/api'
+import { addWalk } from '../lib/walks'
+
+const PLACES = ['Bulwar Nadmorski', 'Plaża Brzeźno', 'Park Oliwski', 'Molo w Orłowie', 'Plaża Stogi']
 
 type Phase = 'idle' | 'active' | 'summary'
 
@@ -21,6 +24,8 @@ export function Walk() {
   const [steps, setSteps] = useState(0)
   const [withSomeone, setWithSomeone] = useState(false)
   const [inNature, setInNature] = useState(true)
+  const [photos, setPhotos] = useState<string[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
   const timer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -40,13 +45,44 @@ export function Walk() {
   const start = () => {
     setSec(0)
     setSteps(0)
+    setPhotos([])
     setPhase('active')
   }
   const stop = () => {
     if (timer.current) window.clearInterval(timer.current)
     setPhase('summary')
   }
-  const reset = () => setPhase('idle')
+  const reset = () => {
+    setPhotos([])
+    setPhase('idle')
+  }
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    const r = new FileReader()
+    r.onload = () => setPhotos((p) => [...p, String(r.result)])
+    r.readAsDataURL(f)
+  }
+
+  const save = () => {
+    const now = new Date()
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    addWalk({
+      id: 'w' + now.getTime(),
+      dateLabel: `Dziś • ${hh}:${mm}`,
+      durationSec: sec,
+      steps,
+      points: total,
+      withSomeone,
+      inNature,
+      place: PLACES[Math.floor(Math.random() * PLACES.length)],
+      routeSeed: Math.floor(Math.random() * 100000),
+      photos,
+    })
+    nav('/history')
+  }
 
   return (
     <div>
@@ -57,6 +93,12 @@ export function Walk() {
           {/* ── IDLE ── */}
           {phase === 'idle' && (
             <motion.div key="idle" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <button
+                onClick={() => nav('/history')}
+                className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl glass py-2.5 text-sm font-bold text-deep transition active:scale-[0.98]"
+              >
+                <ClockCounterClockwise size={16} /> Moje spacery
+              </button>
               <Card className="relative mt-2 overflow-hidden p-6 text-center">
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center opacity-50">
                   <FootstepTrail count={6} color="#0f8b8d" />
@@ -155,10 +197,27 @@ export function Walk() {
                 <p className="mt-4 text-sm font-bold text-[#2f7a45]">🦭 Jesteś coraz bliżej adopcji foki!</p>
               </Card>
 
+              {/* zdjęcia z trasy */}
+              <div className="mt-4">
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+                <div className="no-scrollbar flex gap-2 overflow-x-auto">
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl border border-dashed border-sea/40 bg-white/50 text-deep transition active:scale-95"
+                  >
+                    <Camera size={22} />
+                  </button>
+                  {photos.map((p, i) => (
+                    <img key={i} src={p} alt="" className="h-20 w-20 shrink-0 rounded-2xl object-cover" />
+                  ))}
+                </div>
+                <p className="mt-1.5 text-center text-xs text-muted">Dodaj zdjęcia z trasy 📸</p>
+              </div>
+
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <SoftButton onClick={reset}>Jeszcze raz</SoftButton>
-                <PrimaryButton onClick={() => nav('/community')}>
-                  Społeczność <ArrowRight size={18} />
+                <PrimaryButton onClick={save}>
+                  <Check size={18} /> Zapisz spacer
                 </PrimaryButton>
               </div>
             </motion.div>

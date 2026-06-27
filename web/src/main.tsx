@@ -9,7 +9,7 @@ import { ModeProvider } from './lib/mode'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <IconContext.Provider value={{ weight: 'duotone' }}>
+      <IconContext.Provider value={{ weight: 'bold' }}>
         <ModeProvider>
           <App />
         </ModeProvider>
