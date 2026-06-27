@@ -1,34 +1,3 @@
-# Sub-repositories — tracked independently
-DummyRepo/
-GitMe/
-Kemux/
-Mexpi/
-PPEAgent/
-PPEAgentDeployment/
-Phaistos/
-Piximps/
-RustyLeetcode/
-ServeMyKind/
-StyledTailwindGaTSby/
-botl/
-distillery/
-dotfiles/
-kamilandrzejrybacki-inc/
-kamilrybacki/
-kamilrybacki.github.io/
-mclip/
-meepmap/
-mtgapi/
-muselet/
-portkeyagent/
-
-# Common build/cache artifacts
-node_modules/
-__pycache__/
-*.pyc
-.venv/
-target/
-dist/
-build/
-.cache/
+.dev/
 .codex
+.claude/
