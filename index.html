@@ -135,7 +135,7 @@
   <div class="wrap">
     <nav class="nav">
       <span class="brand"><span class="mark"></span><span class="word">Sea<span class="s">Steps</span></span></span>
-      <a class="btn btn-ghost" data-app href="#">Zaloguj się</a>
+      <a class="btn btn-ghost" data-login href="#">Zaloguj się</a>
     </nav>
 
     <!-- HERO -->
@@ -239,7 +239,9 @@
     /* ⬇️ ADRES APLIKACJI — podmień po wdrożeniu apki na Vercel,
        np. "https://walk4change.vercel.app/" (teraz lokalny podgląd) */
     var APP_URL = "http://localhost:5173/";
+    var LOGIN_URL = APP_URL.replace(/\/$/, "") + "/login";
     document.querySelectorAll("[data-app]").forEach(function (a) { a.setAttribute("href", APP_URL); });
+    document.querySelectorAll("[data-login]").forEach(function (a) { a.setAttribute("href", LOGIN_URL); });
   </script>
 </body>
 </html>
