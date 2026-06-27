@@ -16,6 +16,7 @@ function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent)
 }
 
+/** Małe, nienachalne okienko instalacji w rogu — pojawia się po interakcji + chwili. */
 export function InstallModal() {
   const [open, setOpen] = useState(false)
   const [deferred, setDeferred] = useState<any>(null)
@@ -32,11 +33,24 @@ export function InstallModal() {
     window.addEventListener('beforeinstallprompt', onPrompt)
     window.addEventListener('appinstalled', () => setOpen(false))
 
-    // pokaż okno po chwili (zdąży złapać beforeinstallprompt)
-    const t = window.setTimeout(() => setOpen(true), 1200)
+    // pokaż dopiero ~6 s PO pierwszej interakcji (scroll/klik), nie od razu
+    let timer: number | undefined
+    let used = false
+    const arm = () => {
+      if (used) return
+      used = true
+      timer = window.setTimeout(() => setOpen(true), 6000)
+    }
+    window.addEventListener('scroll', arm, { once: true, passive: true })
+    window.addEventListener('pointerdown', arm, { once: true })
+    window.addEventListener('keydown', arm, { once: true })
+
     return () => {
       window.removeEventListener('beforeinstallprompt', onPrompt)
-      window.clearTimeout(t)
+      window.removeEventListener('scroll', arm)
+      window.removeEventListener('pointerdown', arm)
+      window.removeEventListener('keydown', arm)
+      if (timer) window.clearTimeout(timer)
     }
   }, [])
 
@@ -57,56 +71,42 @@ export function InstallModal() {
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-[rgba(12,90,113,0.28)] p-0 backdrop-blur-sm sm:items-center sm:p-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={dismiss}
+          initial={{ opacity: 0, y: 24, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 24, scale: 0.96 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+          className="glass fixed left-4 right-4 z-[60] rounded-3xl border border-white/70 p-4 shadow-[0_24px_60px_rgba(12,90,113,0.22)] sm:left-auto sm:right-6 sm:w-[330px] bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] sm:bottom-6"
         >
-          <motion.div
-            onClick={(e) => e.stopPropagation()}
-            initial={{ y: 60, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 60, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-            className="relative w-full max-w-sm rounded-t-[28px] bg-white p-6 text-center shadow-[0_-20px_60px_rgba(12,90,113,0.25)] sm:rounded-[28px]"
-          >
-            <button onClick={dismiss} aria-label="Zamknij" className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-sea/8 text-muted">
-              <X size={16} weight="bold" />
-            </button>
+          <button onClick={dismiss} aria-label="Zamknij" className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full bg-sea/8 text-muted">
+            <X size={14} weight="bold" />
+          </button>
 
-            <div className="mx-auto mb-3 drop-shadow-[0_12px_24px_rgba(15,139,141,0.3)]">
-              <LogoMark size={68} />
+          <div className="flex items-start gap-3 pr-6">
+            <div className="shrink-0 drop-shadow-[0_8px_18px_rgba(15,139,141,0.3)]">
+              <LogoMark size={44} />
             </div>
-            <h2 className="font-display text-2xl font-bold text-ink">Zainstaluj SeaSteps</h2>
-            <p className="mx-auto mt-2 max-w-[280px] text-sm leading-snug text-muted">
-              Dodaj aplikację do ekranu głównego — pełny ekran, szybki dostęp i działa też offline. Bez sklepu, jednym dotknięciem.
+            <div>
+              <div className="font-display text-base font-bold text-ink">Zainstaluj SeaSteps</div>
+              <p className="mt-0.5 text-xs leading-snug text-muted">Pełny ekran, szybki dostęp, działa offline — bez sklepu.</p>
+            </div>
+          </div>
+
+          {ios ? (
+            <p className="mt-3 rounded-2xl bg-sea/8 px-3 py-2 text-xs font-semibold text-deep">
+              Dotknij <Export size={14} weight="fill" className="inline align-text-bottom text-sea" /> <b>Udostępnij</b> → <b>„Do ekranu początkowego"</b>
             </p>
-
-            {ios ? (
-              <div className="mt-5 rounded-2xl bg-sea/8 p-4 text-left text-sm font-semibold text-deep">
-                <span className="inline-flex items-center gap-2">
-                  Na iPhone: dotknij <Export size={18} weight="fill" className="text-sea" /> <b>Udostępnij</b>
-                </span>
-                <div className="mt-1">→ przewiń i wybierz <b>„Do ekranu początkowego"</b>.</div>
-              </div>
-            ) : deferred ? (
-              <button
-                onClick={install}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sea to-deep py-3.5 text-base font-bold text-white shadow-[0_16px_30px_rgba(12,90,113,0.25)] transition active:scale-95"
-              >
-                <DownloadSimple size={20} weight="fill" /> Zainstaluj
-              </button>
-            ) : (
-              <div className="mt-5 rounded-2xl bg-sea/8 p-4 text-sm font-semibold text-deep">
-                W menu przeglądarki wybierz <b>„Zainstaluj aplikację"</b> / <b>„Dodaj do ekranu głównego"</b>.
-              </div>
-            )}
-
-            <button onClick={dismiss} className="mt-3 text-sm font-bold text-muted">
-              Może później
+          ) : deferred ? (
+            <button
+              onClick={install}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sea to-deep py-2.5 text-sm font-bold text-white transition active:scale-95"
+            >
+              <DownloadSimple size={16} weight="fill" /> Zainstaluj
             </button>
-          </motion.div>
+          ) : (
+            <p className="mt-3 rounded-2xl bg-sea/8 px-3 py-2 text-xs font-semibold text-deep">
+              W menu przeglądarki: <b>„Zainstaluj aplikację"</b>
+            </p>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
