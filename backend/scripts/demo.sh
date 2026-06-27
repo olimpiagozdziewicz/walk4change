@@ -14,7 +14,7 @@ cd "$BACKEND_DIR"
 
 API="${API:-http://localhost:8080}"
 WEB_URL="${WEB_URL:-http://localhost:5173}"
-WEB_DIR="${WEB_DIR:-$BACKEND_DIR/../../walk4change/web}"
+WEB_DIR="${WEB_DIR:-$BACKEND_DIR/../web}"
 PW="${SEED_PASSWORD:-demodemo}"
 LOOPS="${LOOPS:-2}"
 
