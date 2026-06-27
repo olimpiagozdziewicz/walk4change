@@ -12,8 +12,8 @@
   --color-sand: #f4c973;
   --color-foam: #ffffff;
 
-  /* Typography */
-  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+  /* Typography — neutralna, lekka, bez wywijasow */
+  --font-display: 'Outfit', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Manrope', ui-sans-serif, system-ui, sans-serif;
 
   /* Radii */
