@@ -204,6 +204,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(auth::handlers::logout))
         .route("/api/v1/auth/magic/request", post(auth::handlers::magic_request))
         .route("/api/v1/auth/magic/verify", post(auth::handlers::magic_verify))
+        .route("/api/v1/auth/supabase", post(auth::handlers::supabase_exchange))
         .route(
             "/api/v1/me",
             get(routes::profile::get_me).patch(routes::profile::patch_me),

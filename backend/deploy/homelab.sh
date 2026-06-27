@@ -41,6 +41,8 @@ docker run -d --name walk4change-prod --restart unless-stopped \
   -e SMTP_USER="${SMTP_USER:-}" \
   -e SMTP_PASS="${SMTP_PASS:-}" \
   -e SMTP_FROM="${SMTP_FROM:-}" \
+  -e SUPABASE_URL="${SUPABASE_URL:-}" \
+  -e SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}" \
   -p "$PORT:8080" \
   "$IMAGE" >/dev/null
 

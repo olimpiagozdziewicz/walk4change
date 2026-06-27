@@ -6,7 +6,7 @@ import { FootstepTrail } from '../components/Footsteps'
 import { Celebrate } from '../components/Celebrate'
 import { LiveMap, type MapWalker } from '../components/LiveMap'
 import { apiRequest, hasBackend, getToken } from '../lib/http'
-import { login, register, currentUserId } from '../lib/auth'
+import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
@@ -48,6 +48,7 @@ export function Walk() {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [magicMsg, setMagicMsg] = useState<string | null>(null)
 
   // walk + pairing
   const [sessionId, setSessionId] = useState('')
@@ -117,6 +118,18 @@ export function Walk() {
       setPhase('idle')
     } catch {
       setError(mode === 'signup' ? 'Rejestracja nieudana (hasło min. 8 znaków, e-mail z @).' : 'Logowanie nieudane — sprawdź dane.')
+    } finally { setBusy(false) }
+  }
+
+  const doMagic = async () => {
+    if (busy) return
+    if (!email.includes('@')) { setError('Podaj e-mail, aby wysłać magiczny link.'); return }
+    setBusy(true); setError(null); setMagicMsg(null)
+    try {
+      await requestMagicLink(email)
+      setMagicMsg(`✓ Sprawdź skrzynkę — magiczny link poszedł na ${email.trim()}.`)
+    } catch {
+      setError('Nie udało się wysłać magicznego linku.')
     } finally { setBusy(false) }
   }
 
@@ -226,6 +239,8 @@ export function Walk() {
                 <input value={pass} onChange={(e) => setPass(e.target.value)} type="password" className="mt-1 w-full rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-sm outline-none" placeholder="min. 8 znaków" />
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
                 <PrimaryButton onClick={doAuth} className="mt-4 w-full"><SignIn size={18} /> {busy ? 'Chwila…' : mode === 'signup' ? 'Załóż konto' : 'Zaloguj się'}</PrimaryButton>
+                <button onClick={doMagic} disabled={busy} className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60">albo wyślij magiczny link →</button>
+                {magicMsg && <p className="mt-2 text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
               </Card>
             </motion.div>
           )}

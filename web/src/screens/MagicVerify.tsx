@@ -1,31 +1,34 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiRequest, setToken } from '../lib/http'
-import { setAuthed, setCurrentUserId } from '../lib/auth'
+import { exchangeSupabaseSession } from '../lib/auth'
 
-/** Consumes a magic-link token (/auth/magic?token=…), stores the JWT, enters the app. */
+/**
+ * Magic-link landing (/auth/magic). Supabase establishes a session from the URL
+ * (implicit flow); we retry-exchange it for the backend JWT, then enter the app.
+ */
 export function MagicVerify() {
   const nav = useNavigate()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get('token')
-    if (!token) { setError('Brak tokenu w linku.'); return }
-    let cancelled = false
-    ;(async () => {
+    let done = false
+    const attempt = async (n: number) => {
+      if (done) return
       try {
-        const res = await apiRequest<{ id?: string }>('/auth/magic/verify', { method: 'POST', auth: false, body: { token } })
-        if (cancelled) return
-        if (res.token) setToken(res.token)
-        if (res.data?.id) setCurrentUserId(res.data.id)
-        setAuthed(true)
-        window.history.replaceState(null, '', '/walk')
-        nav('/walk')
+        if (await exchangeSupabaseSession()) {
+          done = true
+          window.history.replaceState(null, '', '/walk')
+          nav('/walk')
+          return
+        }
       } catch {
-        if (!cancelled) setError('Link wygasł lub jest nieprawidłowy. Poproś o nowy magiczny link.')
+        /* retry below */
       }
-    })()
-    return () => { cancelled = true }
+      if (n < 9) window.setTimeout(() => attempt(n + 1), 400)
+      else setError('Nie udało się zalogować linkiem. Poproś o nowy magiczny link.')
+    }
+    attempt(0)
+    return () => { done = true }
   }, [nav])
 
   return (

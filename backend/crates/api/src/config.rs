@@ -20,8 +20,12 @@ pub struct AppConfig {
     pub rate_limit_window_secs: u64,
     /// Public base URL of the web app, used to build magic-link URLs.
     pub app_url: String,
-    /// SMTP settings for magic-link email. `None` => magic-link disabled.
+    /// SMTP settings for magic-link email. `None` => SMTP magic-link disabled.
     pub mail: Option<MailConfig>,
+    /// Supabase project URL (e.g. https://<ref>.supabase.co) for token exchange.
+    pub supabase_url: Option<String>,
+    /// Supabase anon (public) key, used as the `apikey` when validating tokens.
+    pub supabase_anon_key: Option<String>,
 }
 
 /// SMTP configuration for sending magic-link emails.
@@ -134,6 +138,12 @@ impl AppConfig {
             _ => None,
         };
 
+        let supabase_url = std::env::var("SUPABASE_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim_end_matches('/').to_string());
+        let supabase_anon_key = std::env::var("SUPABASE_ANON_KEY").ok().filter(|s| !s.trim().is_empty());
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -149,6 +159,8 @@ impl AppConfig {
             rate_limit_window_secs,
             app_url,
             mail,
+            supabase_url,
+            supabase_anon_key,
         })
     }
 
@@ -171,6 +183,8 @@ impl AppConfig {
             rate_limit_window_secs: 60,
             app_url: "http://localhost:5173".into(),
             mail: None,
+            supabase_url: None,
+            supabase_anon_key: None,
         }
     }
 }

@@ -235,14 +235,17 @@
     <footer>SeaSteps — Hack4Change 2026 · Gdańsk</footer>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     var APP_URL = "https://web-alpha-three-89.vercel.app/";
-    var API_BASE = "https://walk4change.kamilandrzejrybacki.dpdns.org";
+    var SUPABASE_URL = "https://vjsjxdqnmhyrglsfqvvp.supabase.co";
+    var SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqc2p4ZHFubWh5cmdsc2ZxdnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDAxODIsImV4cCI6MjA5ODA3NjE4Mn0.LtUG8kIIeNPrqN9wKw-mhra0EmQMyo21FFRQ0F8wDz4";
+    var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
     /* "Zaloguj się" / plain CTA links -> open the app. */
     document.querySelectorAll("[data-app]").forEach(function (a) { a.setAttribute("href", APP_URL); });
 
-    /* Magic-link forms: actually request a one-time login email (no redirect). */
+    /* Magic-link forms: send a Supabase magic link (returns to the app /auth/magic). */
     document.querySelectorAll(".ml").forEach(function (form) {
       var input = form.querySelector("input[type=email]");
       var btn = form.querySelector(".btn");
@@ -254,16 +257,12 @@
         var email = (input.value || "").trim();
         if (email.indexOf("@") < 0) { input.focus(); return; }
         btn.textContent = "Wysyłam…";
-        fetch(API_BASE + "/api/v1/auth/magic/request", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email: email })
-        }).then(function (r) {
-          if (!r.ok) throw new Error("bad");
-          form.innerHTML = '<p style="margin:0;font-weight:700;color:var(--deep)">✓ Sprawdź skrzynkę — magiczny link poszedł na ' + email + '.</p>';
-        }).catch(function () {
-          btn.textContent = "Spróbuj ponownie";
-        });
+        sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: APP_URL + "auth/magic" } })
+          .then(function (res) {
+            if (res.error) throw res.error;
+            form.innerHTML = '<p style="margin:0;font-weight:700;color:var(--deep)">✓ Sprawdź skrzynkę — magiczny link poszedł na ' + email + '.</p>';
+          })
+          .catch(function () { btn.textContent = "Spróbuj ponownie"; });
       });
     });
   </script>

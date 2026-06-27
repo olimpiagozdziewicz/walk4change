@@ -89,3 +89,41 @@ export async function logout(): Promise<void> {
   }
   setAuthed(false)
 }
+
+// ── Magic link via Supabase Auth ───────────────────────────────────────────
+// Supabase sends the email + establishes a session on click; we then exchange
+// its access token for THIS app's JWT so all data calls keep using the backend.
+
+/** Send a Supabase magic-link email. Link returns to /auth/magic. */
+export async function requestMagicLink(email: string): Promise<void> {
+  const { supabase } = await import('./supabase')
+  const redirectTo = `${window.location.origin}/auth/magic`
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email.trim(),
+    options: { emailRedirectTo: redirectTo },
+  })
+  if (error) throw error
+}
+
+/**
+ * After a Supabase magic-link redirect, exchange the Supabase session for the
+ * backend JWT. Returns true on success. Clears the Supabase session afterwards.
+ */
+export async function exchangeSupabaseSession(): Promise<boolean> {
+  const { supabase, hasSupabase } = await import('./supabase')
+  if (!hasSupabase()) return false
+  const { data } = await supabase.auth.getSession()
+  const accessToken = data.session?.access_token
+  if (!accessToken) return false
+
+  const res = await apiRequest<{ id?: string }>('/auth/supabase', {
+    method: 'POST',
+    auth: false,
+    body: { access_token: accessToken },
+  })
+  if (res.token) setToken(res.token)
+  if (res.data?.id) setCurrentUserId(res.data.id)
+  setAuthed(true)
+  await supabase.auth.signOut().catch(() => {})
+  return true
+}

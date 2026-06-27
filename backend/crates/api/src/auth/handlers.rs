@@ -198,3 +198,69 @@ pub async fn magic_verify(
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
     Ok(Json(json!({ "token": token, "data": profile })))
 }
+
+#[derive(Deserialize)]
+pub struct SupabaseExchange {
+    pub access_token: String,
+}
+
+#[derive(Deserialize)]
+struct SupabaseUser {
+    email: Option<String>,
+}
+
+/// `POST /api/v1/auth/supabase`
+///
+/// Bridge for Supabase-Auth magic links: validate a Supabase access token by
+/// calling Supabase's `/auth/v1/user`, then find-or-create the matching local
+/// user and return THIS service's JWT + profile (so all app data keeps using
+/// the backend's own auth). Invalid token → 401.
+pub async fn supabase_exchange(
+    State(state): State<AppState>,
+    Json(body): Json<SupabaseExchange>,
+) -> Result<Json<Value>, AppError> {
+    let url = state
+        .config
+        .supabase_url
+        .as_ref()
+        .ok_or_else(|| AppError::internal("supabase auth is not configured"))?;
+    let anon = state
+        .config
+        .supabase_anon_key
+        .as_ref()
+        .ok_or_else(|| AppError::internal("supabase auth is not configured"))?;
+
+    let resp = reqwest::Client::new()
+        .get(format!("{url}/auth/v1/user"))
+        .header("apikey", anon)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", body.access_token.trim()))
+        .send()
+        .await
+        .map_err(AppError::internal)?;
+
+    if !resp.status().is_success() {
+        return Err(AppError::Unauthorized);
+    }
+
+    let user: SupabaseUser = resp.json().await.map_err(AppError::internal)?;
+    let email = user
+        .email
+        .map(|e| e.trim().to_lowercase())
+        .filter(|e| e.contains('@'))
+        .ok_or(AppError::Unauthorized)?;
+
+    let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
+        Some(u) => u.id,
+        None => {
+            let id = Uuid::new_v4();
+            let hash = password::hash(&state.config, &random_string(40))?;
+            let display = email.split('@').next().unwrap_or("walker");
+            user_repo::create(&state.pool, id, &email, &hash, display).await?;
+            id
+        }
+    };
+
+    let token = jwt::encode(&state.config, user_id)?;
+    let profile = user_repo::get_profile(&state.pool, user_id).await?;
+    Ok(Json(json!({ "token": token, "data": profile })))
+}
