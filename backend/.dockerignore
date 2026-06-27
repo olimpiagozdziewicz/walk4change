@@ -1,0 +1,13 @@
+# Keep the Docker build context small + stable (so dev tooling changes don't
+# bust the Rust build cache layer).
+target/
+.git/
+.env
+.env.*
+*.md
+docs/
+scripts/
+Makefile
+docker-compose.yml
+Dockerfile
+.dockerignore

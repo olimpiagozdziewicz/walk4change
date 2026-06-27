@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: walk
+      POSTGRES_PASSWORD: walk
+      POSTGRES_DB: walk4change
+    ports: ["5433:5432"]
+    volumes:
+      - walk4change_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U walk -d walk4change"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the DB is reachable as `db:5432`.
+      DATABASE_URL: postgres://walk:walk@db:5432/walk4change
+      JWT_SECRET: local-dev-secret-change-me-min-32-characters
+      BIND_ADDR: 0.0.0.0:8080
+      # Vite dev server origin so the browser can call the API.
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports: ["8080:8080"]
+
+volumes:
+  walk4change_pgdata:

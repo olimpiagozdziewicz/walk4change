@@ -1,0 +1,157 @@
+//! In-memory fixed-window per-IP rate limiter.
+//!
+//! Two instances are created in [`crate::build_app`]:
+//! - **auth** — strict bucket for `/api/v1/auth/*`
+//! - **global** — moderate bucket for all other routes
+//!
+//! Uses `std::time::Instant` (monotonic) for window tracking.
+
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+struct Window {
+    count: u32,
+    start: Instant,
+}
+
+/// Thread-safe fixed-window per-IP rate limiter.
+pub struct RateLimiter {
+    buckets: Mutex<HashMap<IpAddr, Window>>,
+    max_requests: u32,
+    window: Duration,
+    /// Monotonically increasing counter used to schedule periodic pruning.
+    call_count: AtomicU64,
+}
+
+impl RateLimiter {
+    /// Create a new limiter allowing `max_requests` per `window_secs` seconds.
+    pub fn new(max_requests: u32, window_secs: u64) -> Self {
+        Self {
+            buckets: Mutex::new(HashMap::new()),
+            max_requests,
+            window: Duration::from_secs(window_secs),
+            call_count: AtomicU64::new(0),
+        }
+    }
+
+    /// Return the configured request limit for this window.
+    pub fn max_requests(&self) -> u32 {
+        self.max_requests
+    }
+
+    /// Check whether `ip` is within quota.
+    ///
+    /// Returns `Ok(())` if the request may proceed (counter is incremented).
+    /// Returns `Err(retry_after_secs)` if quota is exhausted (≥1 second).
+    pub fn check(&self, ip: IpAddr) -> Result<(), u64> {
+        let mut buckets = self
+            .buckets
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let now = Instant::now();
+
+        // Opportunistically prune every 256 calls to bound map growth.
+        // Pruning before accessing the current entry avoids borrow conflicts;
+        // any stale entry for `ip` will simply be re-created fresh below.
+        let prev = self.call_count.fetch_add(1, Ordering::Relaxed);
+        if prev % 256 == 0 {
+            let window = self.window;
+            buckets.retain(|_, w| now.duration_since(w.start) < window);
+        }
+
+        let entry = buckets.entry(ip).or_insert_with(|| Window {
+            count: 0,
+            start: now,
+        });
+
+        // Roll the window when it has fully elapsed.
+        if now.duration_since(entry.start) >= self.window {
+            entry.count = 0;
+            entry.start = now;
+        }
+
+        if entry.count >= self.max_requests {
+            let elapsed = now.duration_since(entry.start);
+            let remaining = self.window.saturating_sub(elapsed);
+            // Report at least 1 second so clients never get Retry-After: 0.
+            let retry_after = remaining.as_secs().max(1);
+            return Err(retry_after);
+        }
+
+        entry.count += 1;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn allows_up_to_max_requests() {
+        let lim = RateLimiter::new(3, 60);
+        let ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        assert!(lim.check(ip).is_ok());
+        assert!(lim.check(ip).is_ok());
+        assert!(lim.check(ip).is_ok());
+        assert!(lim.check(ip).is_err());
+    }
+
+    #[test]
+    fn different_ips_have_separate_buckets() {
+        let lim = RateLimiter::new(1, 60);
+        let ip_a = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let ip_b = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+        assert!(lim.check(ip_a).is_ok());
+        assert!(lim.check(ip_b).is_ok());
+        assert!(lim.check(ip_a).is_err());
+    }
+
+    #[test]
+    fn retry_after_is_at_least_one() {
+        let lim = RateLimiter::new(1, 60);
+        let ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        lim.check(ip).unwrap();
+        let retry = lim.check(ip).unwrap_err();
+        assert!(retry >= 1);
+    }
+
+    #[test]
+    fn prune_removes_stale_entries() {
+        let lim = RateLimiter::new(100, 60);
+        let ip_stale1 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+        let ip_stale2 = IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2));
+        let ip_fresh = IpAddr::V4(Ipv4Addr::new(3, 3, 3, 3));
+
+        // Directly insert stale entries whose window has long expired.
+        {
+            let mut buckets = lim.buckets.lock().unwrap();
+            buckets.insert(
+                ip_stale1,
+                Window {
+                    count: 5,
+                    start: Instant::now() - Duration::from_secs(120),
+                },
+            );
+            buckets.insert(
+                ip_stale2,
+                Window {
+                    count: 3,
+                    start: Instant::now() - Duration::from_secs(61),
+                },
+            );
+        }
+
+        // call_count starts at 0, so the very first check() triggers a prune
+        // (prev == 0, and 0 % 256 == 0).
+        lim.check(ip_fresh).unwrap();
+
+        let remaining = lim.buckets.lock().unwrap().len();
+        assert_eq!(remaining, 1, "stale entries should have been pruned; only ip_fresh remains");
+    }
+}
