@@ -111,11 +111,16 @@ impl AppConfig {
 mod tests {
     use super::*;
 
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn rejects_short_jwt_secret() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("JWT_SECRET", "short");
         std::env::set_var("DATABASE_URL", "postgres://x");
         let err = AppConfig::from_env().unwrap_err();
+        std::env::remove_var("JWT_SECRET");
+        std::env::remove_var("DATABASE_URL");
         assert!(matches!(err, ConfigError::JwtSecretTooShort));
     }
 

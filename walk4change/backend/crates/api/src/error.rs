@@ -32,7 +32,14 @@ pub enum AppError {
     RateLimited,
     /// Use for unexpected errors. Detail is logged server-side; generic message is sent to client.
     #[error("Internal server error")]
-    Internal,
+    Internal(String),
+}
+
+impl AppError {
+    /// Construct an `Internal` error, capturing the display form of any error/message.
+    pub fn internal<E: std::fmt::Display>(e: E) -> Self {
+        AppError::Internal(e.to_string())
+    }
 }
 
 impl IntoResponse for AppError {
@@ -77,8 +84,8 @@ impl IntoResponse for AppError {
                 "Too many requests — please slow down".to_string(),
                 None,
             ),
-            AppError::Internal => {
-                tracing::error!("Internal server error (no detail logged here — add context at call site)");
+            AppError::Internal(msg) => {
+                tracing::error!(detail = %msg, "internal error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "INTERNAL_ERROR",
@@ -143,7 +150,7 @@ mod tests {
 
     #[test]
     fn internal_maps_to_500() {
-        let resp = AppError::Internal.into_response();
+        let resp = AppError::Internal("boom".into()).into_response();
         assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
