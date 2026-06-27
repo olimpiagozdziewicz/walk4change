@@ -2,20 +2,19 @@ export function LogoMark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
       <defs>
-        <linearGradient id="lg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+        <linearGradient id="ssMark" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
           <stop stopColor="#0f8b8d" />
           <stop offset="1" stopColor="#58b86c" />
         </linearGradient>
+        <clipPath id="ssClip">
+          <rect x="4" y="4" width="56" height="56" rx="18" />
+        </clipPath>
       </defs>
-      <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#lg)" />
-      <ellipse cx="24" cy="30" rx="7" ry="9.5" fill="#fff" fillOpacity="0.92" transform="rotate(-12 24 30)" />
-      <circle cx="18.5" cy="20.5" r="2.7" fill="#fff" fillOpacity="0.92" />
-      <circle cx="24" cy="18.5" r="2.4" fill="#fff" fillOpacity="0.92" />
-      <circle cx="29" cy="20" r="2.1" fill="#fff" fillOpacity="0.92" />
-      <ellipse cx="42" cy="42" rx="6" ry="8" fill="#fff" fillOpacity="0.7" transform="rotate(10 42 42)" />
-      <circle cx="37.5" cy="34" r="2.2" fill="#fff" fillOpacity="0.7" />
-      <circle cx="42.5" cy="32.5" r="2" fill="#fff" fillOpacity="0.7" />
-      <circle cx="46.5" cy="34" r="1.8" fill="#fff" fillOpacity="0.7" />
+      <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#ssMark)" />
+      <g clipPath="url(#ssClip)">
+        <rect x="0" y="18" width="50" height="13" rx="6.5" fill="#fff" fillOpacity="0.55" transform="rotate(-12 25 24)" />
+        <rect x="22" y="40" width="42" height="11" rx="5.5" fill="#fff" fillOpacity="0.5" transform="rotate(12 42 45)" />
+      </g>
     </svg>
   )
 }
