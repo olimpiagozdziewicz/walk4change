@@ -35,6 +35,12 @@ docker run -d --name walk4change-prod --restart unless-stopped \
   -e JWT_SECRET="$JWT_SECRET" \
   -e BIND_ADDR="0.0.0.0:8080" \
   -e CORS_ALLOWED_ORIGINS="$CORS_ALLOWED_ORIGINS" \
+  -e APP_URL="${APP_URL:-}" \
+  -e SMTP_HOST="${SMTP_HOST:-}" \
+  -e SMTP_PORT="${SMTP_PORT:-587}" \
+  -e SMTP_USER="${SMTP_USER:-}" \
+  -e SMTP_PASS="${SMTP_PASS:-}" \
+  -e SMTP_FROM="${SMTP_FROM:-}" \
   -p "$PORT:8080" \
   "$IMAGE" >/dev/null
 

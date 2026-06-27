@@ -7,12 +7,20 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use rand::{distributions::Alphanumeric, Rng};
+
 use crate::{
     auth::{extractor::AuthUser, jwt, password},
     error::{AppError, FieldError},
-    repo::user as user_repo,
+    mail,
+    repo::{magic as magic_repo, user as user_repo},
     state::AppState,
 };
+
+/// Generate a random alphanumeric string of length `n`.
+fn random_string(n: usize) -> String {
+    rand::thread_rng().sample_iter(Alphanumeric).take(n).map(char::from).collect()
+}
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
@@ -120,4 +128,73 @@ pub async fn logout(_auth: AuthUser) -> (StatusCode, HeaderMap) {
         ),
     );
     (StatusCode::NO_CONTENT, headers)
+}
+
+#[derive(Deserialize)]
+pub struct MagicRequest {
+    pub email: String,
+}
+
+/// `POST /api/v1/auth/magic/request`
+///
+/// Passwordless login step 1: find-or-create a user for `email`, mint a one-time
+/// token, and email a magic link (`APP_URL/auth/magic?token=…`). Always returns
+/// 200 (does not reveal whether the account existed). 503 if SMTP isn't configured.
+pub async fn magic_request(
+    State(state): State<AppState>,
+    Json(body): Json<MagicRequest>,
+) -> Result<Json<Value>, AppError> {
+    let email = body.email.trim().to_lowercase();
+    if !email.contains('@') {
+        return Err(AppError::Validation(vec![FieldError {
+            field: "email".into(),
+            message: "must contain @".into(),
+            code: "INVALID_EMAIL".into(),
+        }]));
+    }
+
+    let mail_cfg = state
+        .config
+        .mail
+        .as_ref()
+        .ok_or_else(|| AppError::internal("magic-link email is not configured"))?;
+
+    // Find or create a passwordless user (random unusable password hash).
+    let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
+        Some(u) => u.id,
+        None => {
+            let id = Uuid::new_v4();
+            let hash = password::hash(&state.config, &random_string(40))?;
+            let display = email.split('@').next().unwrap_or("walker");
+            user_repo::create(&state.pool, id, &email, &hash, display).await?;
+            id
+        }
+    };
+
+    let token = random_string(48);
+    magic_repo::create_token(&state.pool, &token, user_id).await?;
+
+    let link = format!("{}/auth/magic?token={}", state.config.app_url.trim_end_matches('/'), token);
+    mail::send_magic_link(mail_cfg, &email, &link).await?;
+
+    Ok(Json(json!({ "data": { "sent": true } })))
+}
+
+#[derive(Deserialize)]
+pub struct MagicVerify {
+    pub token: String,
+}
+
+/// `POST /api/v1/auth/magic/verify`
+///
+/// Passwordless login step 2: consume the one-time token and return a JWT +
+/// profile, exactly like register/login. Invalid/expired token → 401.
+pub async fn magic_verify(
+    State(state): State<AppState>,
+    Json(body): Json<MagicVerify>,
+) -> Result<Json<Value>, AppError> {
+    let user_id = magic_repo::consume_token(&state.pool, body.token.trim()).await?;
+    let token = jwt::encode(&state.config, user_id)?;
+    let profile = user_repo::get_profile(&state.pool, user_id).await?;
+    Ok(Json(json!({ "token": token, "data": profile })))
 }

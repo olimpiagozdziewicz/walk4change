@@ -15,6 +15,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod mail;
 pub mod models;
 pub mod repo;
 pub mod response;
@@ -201,6 +202,8 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/auth/register", post(auth::handlers::register))
         .route("/api/v1/auth/login", post(auth::handlers::login))
         .route("/api/v1/auth/logout", post(auth::handlers::logout))
+        .route("/api/v1/auth/magic/request", post(auth::handlers::magic_request))
+        .route("/api/v1/auth/magic/verify", post(auth::handlers::magic_verify))
         .route(
             "/api/v1/me",
             get(routes::profile::get_me).patch(routes::profile::patch_me),

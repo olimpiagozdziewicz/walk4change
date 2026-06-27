@@ -18,6 +18,20 @@ pub struct AppConfig {
     pub rate_limit_global_max: u32,
     /// Sliding-window duration in seconds for rate limiting.
     pub rate_limit_window_secs: u64,
+    /// Public base URL of the web app, used to build magic-link URLs.
+    pub app_url: String,
+    /// SMTP settings for magic-link email. `None` => magic-link disabled.
+    pub mail: Option<MailConfig>,
+}
+
+/// SMTP configuration for sending magic-link emails.
+#[derive(Debug, Clone)]
+pub struct MailConfig {
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    pub pass: String,
+    pub from: String,
 }
 
 /// Errors that can occur during configuration loading.
@@ -98,6 +112,28 @@ impl AppConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or(60);
 
+        // Public app URL for magic-link emails (falls back to first CORS origin, then localhost).
+        let app_url = std::env::var("APP_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| cors_origins.first().cloned().unwrap_or_else(|| "http://localhost:5173".into()));
+
+        // SMTP is optional; magic-link is enabled only when host+user+pass are set.
+        let mail = match (
+            std::env::var("SMTP_HOST").ok().filter(|s| !s.is_empty()),
+            std::env::var("SMTP_USER").ok().filter(|s| !s.is_empty()),
+            std::env::var("SMTP_PASS").ok().filter(|s| !s.is_empty()),
+        ) {
+            (Some(host), Some(user), Some(pass)) => Some(MailConfig {
+                port: std::env::var("SMTP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(587),
+                from: std::env::var("SMTP_FROM").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| user.clone()),
+                host,
+                user,
+                pass,
+            }),
+            _ => None,
+        };
+
         Ok(Self {
             database_url,
             jwt_secret,
@@ -111,6 +147,8 @@ impl AppConfig {
             rate_limit_auth_max,
             rate_limit_global_max,
             rate_limit_window_secs,
+            app_url,
+            mail,
         })
     }
 
@@ -131,6 +169,8 @@ impl AppConfig {
             rate_limit_auth_max: 1_000,
             rate_limit_global_max: 10_000,
             rate_limit_window_secs: 60,
+            app_url: "http://localhost:5173".into(),
+            mail: None,
         }
     }
 }
