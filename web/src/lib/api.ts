@@ -11,7 +11,10 @@
  *   spacer z kimś ×1.5, strefa natury ×3 — i one się mnożą (stackują).
  */
 
-export const API_BASE = import.meta.env.VITE_API_BASE ?? '' // '' = tryb mock
+import { apiRequest, getToken, hasBackend, API_BASE } from './http'
+import { currentUserId, setCurrentUserId } from './auth'
+
+export { API_BASE } // '' = tryb mock (re-eksport dla zgodności)
 
 // ── Typy (kontrakt z backendem) ───────────────────────────
 export interface Profile {
@@ -262,17 +265,116 @@ const teamRewards: Reward[] = [
 const wait = <T>(data: T, ms = 150): Promise<T> =>
   new Promise((res) => setTimeout(() => res(data), ms))
 
+// ── Realny backend (gdy VITE_API_BASE ustawione i mamy token) ─────────────
+// Tylko część ekranów ma odpowiednik w backendzie (profil, nagrody, ranking).
+// Reszta (eventy, eko, sponsorzy, zespoły, dopasowania, „dziś") to nadal mock.
+
+/** Czy używać realnego backendu dla danego wywołania. */
+const live = (): boolean => hasBackend() && !!getToken()
+
+interface BackendProfile {
+  id: string
+  email: string
+  display_name: string
+  avatar_url: string | null
+  bio: string | null
+  interests: string[]
+  created_at: string
+}
+
+interface BackendReward {
+  id: string
+  title: string
+  description: string | null
+  cost_points: string
+  partner_name: string | null
+  type: string
+  stock: number | null
+  image_url: string | null
+}
+
+interface BackendLeaderRow {
+  user_id: string
+  display_name: string
+  total_points: string
+}
+
+function mapProfile(p: BackendProfile): Profile {
+  return {
+    id: p.id,
+    name: p.display_name,
+    // backend trzyma URL/null; UI używa emoji — fallback gdy brak URL-a
+    avatar: p.avatar_url ?? '🌊',
+    interests: p.interests ?? [],
+    stats: { walks: 0, events: 0, ecoReports: 0 },
+    badges: [],
+  }
+}
+
+function mapReward(r: BackendReward): Reward {
+  return {
+    id: r.id,
+    title: r.title,
+    kind: r.partner_name ?? r.type,
+    iconKey: 'voucher',
+    progress: 0,
+  }
+}
+
+function mapLeaderRow(row: BackendLeaderRow, index: number, myId: string | null): LeaderboardRow {
+  return {
+    rank: index + 1,
+    name: row.display_name,
+    avatar: '🚶',
+    points: Math.round(parseFloat(row.total_points)), // rust_decimal => string
+    isMe: myId != null && row.user_id === myId,
+  }
+}
+
+async function fetchProfile(): Promise<Profile> {
+  const res = await apiRequest<BackendProfile>('/me')
+  const p = res.data
+  if (!p) throw new Error('Brak danych profilu')
+  setCurrentUserId(p.id)
+  return mapProfile(p)
+}
+
+async function fetchRewards(): Promise<Reward[]> {
+  const res = await apiRequest<BackendReward[]>('/rewards')
+  return (res.data ?? []).map(mapReward)
+}
+
+async function fetchLeaderboard(): Promise<LeaderboardRow[]> {
+  const res = await apiRequest<BackendLeaderRow[]>('/leaderboard?per_page=20')
+  const myId = currentUserId()
+  return (res.data ?? []).map((row, i) => mapLeaderRow(row, i, myId))
+}
+
+/**
+ * Realny fetch z miękkim fallbackiem na mock. Dzięki temu apka działa nawet,
+ * gdy backend chwilowo nie odpowiada (demo na hackathonie nie pada).
+ */
+async function liveOrMock<T>(fetcher: () => Promise<T>, mock: T, label: string): Promise<T> {
+  if (!live()) return wait(mock)
+  try {
+    return await fetcher()
+  } catch (err) {
+    console.warn(`[api] ${label}: backend niedostępny, używam mocka`, err)
+    return mock
+  }
+}
+
 export const api = {
-  getProfile: () => wait(me),
+  getProfile: () => liveOrMock(fetchProfile, me, 'getProfile'),
   getToday: () => wait(today),
   getCommunityWalks: () => wait(communityWalks),
   getEvents: () => wait(events),
-  getRewards: () => wait(rewards),
+  getRewards: () => liveOrMock(fetchRewards, rewards, 'getRewards'),
   getEcoReports: () => wait(ecoReports),
-  getLeaderboard: () => wait(leaderboard),
+  getLeaderboard: () => liveOrMock(fetchLeaderboard, leaderboard, 'getLeaderboard'),
   getMatches: () => wait(people),
   getSponsors: () => wait(sponsors),
-  // wariant korporacyjny
+  // wariant korporacyjny (brak w backendzie — zawsze mock)
   getTeamToday: () => wait(teamToday),
   getTeamLeaderboard: () => wait(teamLeaderboard),
   getCorporateEvents: () => wait(corporateEvents),

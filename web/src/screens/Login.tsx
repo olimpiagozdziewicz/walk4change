@@ -3,15 +3,35 @@ import { useNavigate } from 'react-router-dom'
 import { Envelope, Lock, ArrowRight, Footprints, Leaf, UsersThree } from '@phosphor-icons/react'
 import { Logo } from '../components/Logo'
 import { FootstepTrail } from '../components/Footsteps'
-import { setAuthed } from '../lib/auth'
+import { login, register, guestEnter } from '../lib/auth'
+import { ApiError } from '../lib/http'
 
 export function Login() {
   const nav = useNavigate()
   const [email, setEmail] = useState('ola@seasteps.pl')
   const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const enter = () => {
-    setAuthed(true)
+  const nameFromEmail = (e: string): string => e.split('@')[0] || 'Spacerowicz'
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+      nav('/app')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Coś poszło nie tak. Spróbuj ponownie.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doLogin = () => run(() => login(email, pass))
+  const doRegister = () => run(() => register(email, pass, nameFromEmail(email)))
+  const doGuest = () => {
+    guestEnter()
     nav('/app')
   }
 
@@ -71,19 +91,26 @@ export function Login() {
             />
           </div>
 
+          {error && (
+            <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 ring-1 ring-rose-100">
+              {error}
+            </p>
+          )}
+
           <button
-            onClick={enter}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sea to-deep py-3.5 text-base font-bold text-white shadow-[0_16px_30px_rgba(12,90,113,0.25)] transition active:scale-95"
+            onClick={doLogin}
+            disabled={busy}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sea to-deep py-3.5 text-base font-bold text-white shadow-[0_16px_30px_rgba(12,90,113,0.25)] transition active:scale-95 disabled:opacity-60"
           >
-            Zaloguj się <ArrowRight size={18} />
+            {busy ? 'Chwila…' : 'Zaloguj się'} <ArrowRight size={18} />
           </button>
 
-          <button onClick={enter} className="mt-3 w-full rounded-2xl border border-white/70 bg-white/80 py-3.5 text-sm font-bold text-deep transition active:scale-95">
+          <button onClick={doGuest} disabled={busy} className="mt-3 w-full rounded-2xl border border-white/70 bg-white/80 py-3.5 text-sm font-bold text-deep transition active:scale-95 disabled:opacity-60">
             Wejdź jako gość (demo)
           </button>
 
           <p className="mt-5 text-center text-sm text-muted">
-            Nie masz konta? <button onClick={enter} className="font-bold text-sea">Załóż konto</button>
+            Nie masz konta? <button onClick={doRegister} disabled={busy} className="font-bold text-sea disabled:opacity-60">Załóż konto</button>
           </p>
         </div>
       </div>
