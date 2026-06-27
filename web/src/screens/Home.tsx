@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, Flame, Leaf, UsersThree, CalendarHeart, Warning, Sparkle, Buildings, Storefront, CaretRight } from '@phosphor-icons/react'
+import { Footprints, Flame, Leaf, UsersThree, CalendarHeart, Warning, Sparkle, Buildings, Storefront, CaretRight, HandWaving } from '@phosphor-icons/react'
 import { Logo } from '../components/Logo'
 import { ModeToggle } from '../components/ModeToggle'
 import { FootstepTrail } from '../components/Footsteps'
@@ -93,7 +93,10 @@ export function Home() {
           </>
         ) : (
           <p className="font-display text-[26px] font-semibold leading-tight text-ink">
-            Cześć Ola 👋<br />
+            <span className="inline-flex items-center gap-2">
+              Cześć Ola <HandWaving size={24} weight="fill" className="text-sand" />
+            </span>
+            <br />
             <span className="text-base font-body text-muted">Dobry dzień na spacer nad wodą.</span>
           </p>
         )}
