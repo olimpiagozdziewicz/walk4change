@@ -4,3 +4,9 @@
 .env
 .env.local
 .env.*.local
+
+# Cloud Run deploy secrets (never commit)
+/deploy/.env.deploy
+/deploy/.run-env.yaml
+*-sa-key.json
+/deploy/.env.homelab
