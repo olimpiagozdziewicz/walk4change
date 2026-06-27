@@ -80,3 +80,42 @@ pub async fn get_profile(pool: &PgPool, id: Uuid) -> Result<Profile, AppError> {
     .map_err(AppError::internal)?
     .ok_or(AppError::NotFound)
 }
+
+/// Fields that can be updated via `PATCH /api/v1/me`.
+/// All fields are optional; `None` means "leave unchanged".
+pub struct ProfilePatch {
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub interests: Option<Vec<String>>,
+}
+
+/// Update the mutable profile fields for a user.
+///
+/// Uses `COALESCE` so that `None` values leave the existing column intact.
+/// Returns the updated [`Profile`], or [`AppError::NotFound`] when the id does not exist.
+pub async fn update_profile(
+    pool: &PgPool,
+    id: Uuid,
+    patch: ProfilePatch,
+) -> Result<Profile, AppError> {
+    sqlx::query_as::<_, Profile>(
+        "UPDATE users \
+         SET display_name = COALESCE($1, display_name), \
+             avatar_url   = COALESCE($2, avatar_url), \
+             bio          = COALESCE($3, bio), \
+             interests    = COALESCE($4::text[], interests) \
+         WHERE id = $5 \
+         RETURNING id, email::text AS email, display_name, avatar_url, bio, \
+                   interests, created_at",
+    )
+    .bind(patch.display_name)
+    .bind(patch.avatar_url)
+    .bind(patch.bio)
+    .bind(patch.interests)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::internal)?
+    .ok_or(AppError::NotFound)
+}

@@ -10,6 +10,7 @@ pub mod error;
 pub mod models;
 pub mod repo;
 pub mod response;
+pub mod routes;
 pub mod scoring;
 pub mod state;
 
@@ -29,6 +30,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auth/register", post(auth::handlers::register))
         .route("/api/v1/auth/login", post(auth::handlers::login))
         .route("/api/v1/auth/logout", post(auth::handlers::logout))
+        .route(
+            "/api/v1/me",
+            get(routes::profile::get_me).patch(routes::profile::patch_me),
+        )
         .with_state(state)
 }
 
