@@ -9,6 +9,7 @@ import { Card, Pill, ProgressBar } from '../components/ui'
 import { SponsorIcon } from '../components/SponsorIcon'
 import { Glyph } from '../components/Glyph'
 import { Avatar } from '../components/Avatar'
+import { InstallButton } from '../components/InstallButton'
 import { useMode } from '../lib/mode'
 import { api, type TodayStats, type Reward, type TeamToday, type Sponsor } from '../lib/api'
 
@@ -98,6 +99,8 @@ export function Home() {
           </p>
         )}
       </motion.div>
+
+      <InstallButton />
 
       {/* hero stat */}
       <motion.div {...fade(2)} className="mt-4">
