@@ -2,11 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import { Broadcast, Play, UsersThree, Leaf, Copy, CheckCircle } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton } from '../components/ui'
 import { LiveMap, type MapWalker } from '../components/LiveMap'
-import { apiRequest, hasBackend, getToken } from '../lib/http'
-import { login, currentUserId } from '../lib/auth'
+import { apiRequest, hasBackend, getToken, setToken } from '../lib/http'
+import { login, currentUserId, setCurrentUserId } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
+
+/** Decode the `sub` (user id) claim from a JWT, best-effort. */
+function uidFromToken(token: string): string | null {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(payload)).sub ?? null
+  } catch {
+    return null
+  }
+}
 
 interface Walker {
   userId: string
@@ -145,6 +155,28 @@ export function Live() {
       () => {},
     )
   }
+
+  // Deep link: /live?token=<jwt>&watch=<session-id> auto-logs-in and auto-watches.
+  // Used by `make demo` so the whole demo is one click. Token is stripped from the
+  // address bar after it's read.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('token')
+    const watch = params.get('watch') ?? params.get('session')
+    if (!t && !watch) return
+    if (t) {
+      setToken(t)
+      const uid = uidFromToken(t)
+      if (uid) setCurrentUserId(uid)
+      setAuthed(true)
+    }
+    if (watch) {
+      setSessionId(watch)
+      connect(watch)
+    }
+    window.history.replaceState(null, '', window.location.pathname)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── No backend configured ───────────────────────────────────────────────────
   if (!hasBackend()) {
