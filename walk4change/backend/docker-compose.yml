@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: walk
+      POSTGRES_PASSWORD: walk
+      POSTGRES_DB: walk4change
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U walk -d walk4change"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

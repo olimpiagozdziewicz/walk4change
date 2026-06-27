@@ -1,0 +1,8 @@
+[package]
+name = "walk4change-replay"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "walk4change-replay"
+path = "src/main.rs"
