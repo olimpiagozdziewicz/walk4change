@@ -8,8 +8,9 @@ import { ApiError } from '../lib/http'
 
 export function Login() {
   const nav = useNavigate()
-  const [email, setEmail] = useState('ola@seasteps.pl')
-  const [pass, setPass] = useState('')
+  // Wartości domyślne = zasiane konto demo (backend lokalny). Patrz scripts/seed.sh.
+  const [email, setEmail] = useState('ana@demo.walk4change')
+  const [pass, setPass] = useState('demodemo')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
