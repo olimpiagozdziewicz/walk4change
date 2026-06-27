@@ -71,14 +71,14 @@ export function ScreenHeader({
   const { pathname } = useLocation()
   // „Wróć" = poziom wyżej w hierarchii, nie cofanie w historii przeglądarki
   const parents: Record<string, string> = {
-    '/walk': '/app',
-    '/community': '/app',
-    '/events': '/app',
-    '/eco': '/app',
-    '/partners': '/app',
+    '/walk': '/',
+    '/community': '/',
+    '/events': '/',
+    '/eco': '/',
+    '/partners': '/',
     '/history': '/walk',
   }
-  const goBack = () => navigate(parents[pathname] ?? '/app')
+  const goBack = () => navigate(parents[pathname] ?? '/')
   return (
     <header className="px-5 pb-2 pt-4">
       {showBack && (

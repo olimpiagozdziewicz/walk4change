@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="seasteps" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f8b8d"/>
+      <stop offset="1" stop-color="#58b86c"/>
+    </linearGradient>
+    <clipPath id="clip"><rect x="4" y="4" width="56" height="56" rx="18"/></clipPath>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#seasteps)"/>
+  <g clip-path="url(#clip)">
+    <rect x="0" y="18" width="50" height="13" rx="6.5" fill="#ffffff" fill-opacity="0.55" transform="rotate(-12 25 24)"/>
+    <rect x="22" y="40" width="42" height="11" rx="5.5" fill="#ffffff" fill-opacity="0.5" transform="rotate(12 42 45)"/>
+  </g>
+</svg>

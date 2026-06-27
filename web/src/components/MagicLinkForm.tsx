@@ -21,7 +21,7 @@ export function MagicLinkForm() {
         <button
           onClick={() => {
             setAuthed(true)
-            nav('/app')
+            nav('/')
           }}
           className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-sea to-deep px-4 py-2.5 text-sm font-bold text-white transition active:scale-95"
         >
