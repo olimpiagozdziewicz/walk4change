@@ -20,6 +20,7 @@ async fn register_returns_201_token_and_profile() {
         .expect("request failed");
 
     assert_eq!(resp.status().as_u16(), 201);
+    assert_eq!(resp.headers()["location"], "/api/v1/me");
     let body: serde_json::Value = resp.json().await.expect("body is not JSON");
     assert!(body["token"].is_string(), "token must be a string");
     assert_eq!(
@@ -201,4 +202,76 @@ async fn logout_clears_session_cookie() {
         .unwrap();
     assert!(cookie.contains("wc_session="), "cookie must clear wc_session");
     assert!(cookie.contains("Max-Age=0"), "cookie must have Max-Age=0");
+}
+
+/// Register with password longer than 128 chars → 422 Validation.
+#[tokio::test]
+async fn register_rejects_too_long_password() {
+    let app = common::spawn().await;
+
+    let long_password = "a".repeat(129);
+    let resp = app
+        .client
+        .post(format!("{}/api/v1/auth/register", app.base_url))
+        .json(&json!({
+            "email": "toolong@example.com",
+            "password": long_password,
+            "display_name": "TooLong"
+        }))
+        .send()
+        .await
+        .expect("request failed");
+
+    assert_eq!(resp.status().as_u16(), 422);
+}
+
+/// Login with unknown email and wrong password return indistinguishable 401s with identical bodies.
+#[tokio::test]
+async fn login_enumeration_responses_are_identical() {
+    let app = common::spawn().await;
+
+    // Register a known user for the wrong-password case
+    app.client
+        .post(format!("{}/api/v1/auth/register", app.base_url))
+        .json(&json!({
+            "email": "known@example.com",
+            "password": "password123",
+            "display_name": "KnownUser"
+        }))
+        .send()
+        .await
+        .expect("register failed");
+
+    // Login attempt with unknown email
+    let unknown_resp = app
+        .client
+        .post(format!("{}/api/v1/auth/login", app.base_url))
+        .json(&json!({
+            "email": "unknown@example.com",
+            "password": "password123"
+        }))
+        .send()
+        .await
+        .expect("unknown email login request failed");
+
+    // Login attempt with known email but wrong password
+    let wrong_pass_resp = app
+        .client
+        .post(format!("{}/api/v1/auth/login", app.base_url))
+        .json(&json!({
+            "email": "known@example.com",
+            "password": "wrongpassword"
+        }))
+        .send()
+        .await
+        .expect("wrong password login request failed");
+
+    // Both should return 401
+    assert_eq!(unknown_resp.status().as_u16(), 401, "unknown email must return 401");
+    assert_eq!(wrong_pass_resp.status().as_u16(), 401, "wrong password must return 401");
+
+    // Bodies must be byte-for-byte identical
+    let unknown_body = unknown_resp.text().await.expect("failed to read unknown response body");
+    let wrong_pass_body = wrong_pass_resp.text().await.expect("failed to read wrong password response body");
+    assert_eq!(unknown_body, wrong_pass_body, "login error responses must be indistinguishable");
 }
