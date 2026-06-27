@@ -20,9 +20,9 @@ pub struct ScoringConfig {
     /// Maximum plausible walking/running speed in m/s; segments above this are dropped.
     pub max_speed_mps: f64,
     /// Window (seconds) for counting companions active in the same session.
-    pub ping_window_secs: u64,
+    pub ping_window_secs: i64,
     /// Maximum allowed clock skew (seconds) between client `recorded_at` and server time.
-    pub recorded_at_tolerance_secs: u64,
+    pub recorded_at_tolerance_secs: i64,
     /// Per-second ceiling on points a single user can earn (anti-fraud layer).
     pub max_points_per_second: Decimal,
 }
@@ -36,10 +36,10 @@ impl Default for ScoringConfig {
             mult_group: Decimal::new(2, 0),             // 2.0
             nature_default: Decimal::new(3, 0),         // 3.0
             stack: true,
-            max_speed_mps: 3.5,                         // ~12.6 km/h (brisk walk/jog)
-            ping_window_secs: 10,
-            recorded_at_tolerance_secs: 30,
-            max_points_per_second: Decimal::new(1, 0), // 1.0 pt/s ceiling
+            max_speed_mps: 8.0,                          // ~28.8 km/h (fast run)
+            ping_window_secs: 60,
+            recorded_at_tolerance_secs: 45,
+            max_points_per_second: Decimal::new(5, 0),  // 5.0 pt/s ceiling
         }
     }
 }
@@ -55,12 +55,12 @@ impl ScoringConfig {
             }
         }
         if let Ok(v) = std::env::var("SCORING_PING_WINDOW_SECS") {
-            if let Ok(n) = v.parse::<u64>() {
+            if let Ok(n) = v.parse::<i64>() {
                 cfg.ping_window_secs = n;
             }
         }
         if let Ok(v) = std::env::var("SCORING_RECORDED_AT_TOLERANCE_SECS") {
-            if let Ok(n) = v.parse::<u64>() {
+            if let Ok(n) = v.parse::<i64>() {
                 cfg.recorded_at_tolerance_secs = n;
             }
         }
