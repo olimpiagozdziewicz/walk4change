@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon.svg" />
+<meta name="theme-color" content="#0f8b8d" />
+<meta name="description" content="SeaSteps — spacer, który łączy Cię z ludźmi i naturą nad Bałtykiem. Punkty za ruch, więcej z kimś i w naturze." />
+<title>SeaSteps — spacer dla Ciebie i Bałtyku</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef7f8; --bg2:#f8fcfd; --ink:#14343a; --muted:#5d7c81;
+    --sea:#0f8b8d; --deep:#0c5a71; --leaf:#58b86c; --sand:#f4c973;
+    --display:'Outfit',sans-serif; --body:'Manrope',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--body); color:var(--ink); position:relative; overflow-x:hidden;
+    background:
+      radial-gradient(circle at 12% -4%, rgba(88,184,108,.16), transparent 26%),
+      radial-gradient(circle at 100% 0%, rgba(15,139,141,.22), transparent 30%),
+      linear-gradient(180deg,#f8fcfd 0%,#e7f4f5 100%);
+  }
+  h1,h2,h3{font-family:var(--display); letter-spacing:-.03em; margin:0;}
+  .wrap{max-width:1120px; margin:0 auto; padding:0 24px; position:relative; z-index:1;}
+  .glass{background:rgba(255,255,255,.78); border:1px solid rgba(255,255,255,.7); backdrop-filter:blur(14px); border-radius:26px;}
+
+  /* ── morze (faluje) ── */
+  .ocean{position:fixed; left:0; right:0; bottom:0; height:32vh; z-index:0; pointer-events:none; overflow:hidden;}
+  .ocean svg{position:absolute; bottom:0; left:-6%; width:112%; height:100%;}
+  .wave1{animation:waveA 7s ease-in-out infinite;}
+  .wave2{animation:waveB 11s ease-in-out infinite;}
+  @keyframes waveA{0%,100%{transform:translate(-3%,4px)}50%{transform:translate(3%,-8px)}}
+  @keyframes waveB{0%,100%{transform:translate(3%,0)}50%{transform:translate(-3%,-12px)}}
+
+  /* ── ikony ── */
+  .i{width:22px; height:22px; fill:var(--sea); display:block;}
+  .tile{width:46px; height:46px; border-radius:14px; background:linear-gradient(135deg,rgba(15,139,141,.12),rgba(88,184,108,.15)); display:grid; place-items:center; margin-bottom:14px;}
+
+  /* ── logo ── */
+  .brand{display:inline-flex; align-items:center; gap:11px; font-family:var(--display); font-weight:700; font-size:22px; color:var(--deep); line-height:1;}
+  .brand .mark{width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg,var(--sea),var(--leaf)); position:relative; overflow:hidden; flex:none;}
+  .brand .mark::before{content:""; position:absolute; left:-2px; top:9px; width:30px; height:7px; border-radius:99px; background:rgba(255,255,255,.55); transform:rotate(-12deg);}
+  .brand .mark::after{content:""; position:absolute; right:-2px; bottom:8px; width:24px; height:6px; border-radius:99px; background:rgba(255,255,255,.5); transform:rotate(12deg);}
+  .brand .word .s{color:var(--sea);}
+
+  .btn{display:inline-flex; align-items:center; gap:8px; border:0; cursor:pointer; font-family:var(--body); font-weight:700; border-radius:16px; text-decoration:none;}
+  .btn-ghost{background:rgba(255,255,255,.7); color:var(--deep); padding:9px 16px; border:1px solid rgba(255,255,255,.6); font-size:14px; border-radius:999px;}
+  .btn-primary{background:linear-gradient(135deg,var(--sea),var(--deep)); color:#fff; padding:14px 22px; font-size:15px; box-shadow:0 16px 30px rgba(12,90,113,.25);}
+  .btn .i{width:18px; height:18px; fill:#fff;}
+
+  .nav{display:flex; align-items:center; justify-content:space-between; padding:20px 0;}
+
+  /* ── hero ── */
+  .hero{display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center; padding:36px 0 60px;}
+  h1{font-size:clamp(38px,5.5vw,60px); line-height:1.05;}
+  h1 .sea{color:var(--sea);} h1 .leaf{color:var(--leaf);}
+  .lead{margin-top:22px; max-width:520px; color:var(--muted); font-size:18px; line-height:1.6;}
+  .ml{display:flex; gap:8px; margin-top:26px; max-width:460px;}
+  .ml input{flex:1; border:1px solid rgba(255,255,255,.6); background:rgba(255,255,255,.9); border-radius:16px; padding:13px 16px; font-family:var(--body); font-size:14px; outline:none;}
+  .trust{margin-top:12px; font-size:12px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:14px;}
+
+  /* ── footsteps ── */
+  .trail{display:inline-flex; gap:4px; color:var(--sea);}
+  .foot{width:16px;}
+  .foot.l{animation:stepL 3.2s infinite;} .foot.r{transform:scaleX(-1); animation:stepR 3.2s infinite;}
+  .foot:nth-child(1){animation-delay:0s} .foot:nth-child(2){animation-delay:.3s} .foot:nth-child(3){animation-delay:.6s}
+  @keyframes stepL{0%{opacity:0;transform:translateY(6px) scale(.6)}20%{opacity:.9;transform:none}75%{opacity:.9}100%{opacity:.12}}
+  @keyframes stepR{0%{opacity:0;transform:scaleX(-1) translateY(6px) scale(.6)}20%{opacity:.9;transform:scaleX(-1)}75%{opacity:.9}100%{opacity:.12}}
+
+  /* ── podgląd apki (prawdziwy zrzut) ── */
+  .appshot{position:relative; margin:0 auto; width:100%; max-width:300px;}
+  .appshot .frame{border-radius:44px; padding:12px; background:#0c5a71; box-shadow:0 44px 110px rgba(12,90,113,.32);}
+  .appshot img{display:block; width:100%; border-radius:34px;}
+  .appshot .float{position:absolute; right:-14px; top:40px; background:#fff; border-radius:16px; padding:10px 14px; box-shadow:0 18px 40px rgba(12,90,113,.18); font-weight:800; font-size:13px; color:var(--deep); display:flex; align-items:center; gap:8px;}
+
+  /* ── sekcje ── */
+  section{padding:42px 0;}
+  .h2{font-size:clamp(26px,4vw,34px);}
+  .sub{max-width:640px; color:var(--muted); margin-top:12px; line-height:1.55;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:26px;}
+  .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:26px;}
+  .feat{padding:22px;}
+  .feat h3{font-size:18px;} .feat p{margin:6px 0 0; color:var(--muted); font-size:14px; line-height:1.5;}
+  .solution{background:linear-gradient(135deg,rgba(15,139,141,.1),rgba(88,184,108,.1)); border-radius:32px; padding:40px;}
+  .mult{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:24px;}
+  .mult .m{background:rgba(255,255,255,.7); border-radius:20px; padding:18px; text-align:center;}
+  .mult .m .tile{margin:0 auto 10px;}
+  .mult .x{font-family:var(--display); font-weight:700; font-size:26px; color:var(--sea);}
+  .mult .l{font-size:12px; font-weight:800; color:var(--muted);}
+  .science{background:var(--deep); color:#fff; border-radius:32px; padding:40px;}
+  .sgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin-top:24px;}
+  .sgrid .num{font-family:var(--display); font-weight:700; font-size:30px;}
+  .sgrid p{margin:6px 0 0; color:rgba(255,255,255,.82); font-size:14px; line-height:1.5;}
+  .cta{background:linear-gradient(135deg,var(--sea),var(--deep)); color:#fff; border-radius:32px; padding:54px 32px; text-align:center;}
+  .cta h2{font-size:clamp(28px,4vw,38px);}
+  .cta p{color:rgba(255,255,255,.85); margin-top:12px;}
+  .cta .ml{margin:24px auto 0;} .cta .ml input{color:var(--ink);}
+  footer{padding:34px 0; text-align:center; color:var(--muted); font-size:14px;}
+  @media(max-width:880px){
+    .hero{grid-template-columns:1fr; gap:36px;}
+    .grid3,.mult,.sgrid{grid-template-columns:1fr;}
+    .grid4{grid-template-columns:1fr 1fr;}
+    .solution,.science{padding:26px;}
+    .ml{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+  <!-- definicje ikon (styl app) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="fp" viewBox="0 0 20 26"><ellipse cx="9" cy="16" rx="6.5" ry="9" transform="rotate(-10 9 16)"/><circle cx="4.5" cy="5" r="2.4"/><circle cx="9.5" cy="3" r="2.1"/><circle cx="14" cy="4.5" r="1.8"/></symbol>
+    <symbol id="users" viewBox="0 0 24 24"><circle cx="8" cy="8.5" r="3.3"/><circle cx="16.5" cy="9" r="2.8"/><path d="M2 19c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5z"/><path d="M14.5 19c.3-2.4 2-4.2 4.2-4.2 2.6 0 4.3 1.8 4.3 4.2z"/></symbol>
+    <symbol id="leaf" viewBox="0 0 24 24"><path d="M20 4C9 4 4 11 4 20c0 0 .7.1 1.8.1C14 20 20 13.5 20 4z"/><path d="M7 18c3-4 6-6 10-8" stroke="rgba(255,255,255,.6)" stroke-width="1.4" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="trophy" viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M5 5H3v2a3 3 0 0 0 3 3M19 5h2v2a3 3 0 0 1-3 3" stroke="currentColor" stroke-width="1.6" fill="none"/><rect x="10" y="13" width="4" height="4"/><rect x="8" y="18" width="8" height="2.5" rx="1.2"/></symbol>
+    <symbol id="tree" viewBox="0 0 24 24"><circle cx="12" cy="9" r="6.5"/><rect x="10.6" y="13" width="2.8" height="8" rx="1.2"/></symbol>
+    <symbol id="waves" viewBox="0 0 24 24"><path d="M2 8c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M2 14c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="heart" viewBox="0 0 24 24"><path d="M12 21C5 16 3 12 3 8.5 3 6 5 4 7.3 4c1.7 0 3 .9 3.7 2 .7-1.1 2-2 3.7-2C20 4 21 6 21 8.5 21 12 19 16 12 21z"/></symbol>
+    <symbol id="building" viewBox="0 0 24 24"><rect x="4" y="3" width="9" height="18" rx="1.5"/><rect x="13" y="8" width="7" height="13" rx="1.5"/><rect x="6.5" y="6" width="2" height="2"/><rect x="9.5" y="6" width="2" height="2"/><rect x="6.5" y="10" width="2" height="2"/><rect x="9.5" y="10" width="2" height="2"/></symbol>
+    <symbol id="store" viewBox="0 0 24 24"><path d="M4 4h16l1 5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><rect x="5" y="11" width="14" height="9" rx="1.5"/></symbol>
+    <symbol id="chart" viewBox="0 0 24 24"><path d="M4 20V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 15l4-4 3 2 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></symbol>
+  </svg>
+
+  <!-- morze w tle -->
+  <div class="ocean" aria-hidden="true">
+    <svg class="wave2" viewBox="0 0 1440 200" preserveAspectRatio="none"><path d="M0,120 C240,60 480,180 720,120 C960,60 1200,170 1440,110 L1440,200 L0,200 Z" fill="rgba(15,139,141,.10)"/></svg>
+    <svg class="wave1" viewBox="0 0 1440 200" preserveAspectRatio="none"><path d="M0,150 C240,100 480,200 720,150 C960,100 1200,200 1440,150 L1440,200 L0,200 Z" fill="rgba(15,139,141,.16)"/></svg>
+  </div>
+
+  <div class="wrap">
+    <nav class="nav">
+      <span class="brand"><span class="mark"></span><span class="word">Sea<span class="s">Steps</span></span></span>
+      <a class="btn btn-ghost" data-app href="#">Zaloguj się</a>
+    </nav>
+
+    <!-- HERO -->
+    <header class="hero">
+      <div>
+        <h1>Spacer, który robi dobrze <span class="sea">Tobie</span> i <span class="leaf">naturze</span>.</h1>
+        <p class="lead">SeaSteps zamienia spacer w grę, która łączy Cię z ludźmi i naturą. Zbierasz punkty za ruch — więcej, gdy idziesz z kimś i blisko wody. Mniej scrollowania, więcej życia.</p>
+        <div class="ml">
+          <input type="email" placeholder="twój@email.pl" />
+          <a class="btn btn-primary" data-app href="#"><svg class="i"><use href="#spark"/></svg> Wyślij magiczny link</a>
+        </div>
+        <div class="trust">
+          <span>Za darmo • bez hasła • wejdź jednym klikiem</span>
+          <span class="trail">
+            <svg class="foot l" viewBox="0 0 20 26"><use href="#fp"/></svg>
+            <svg class="foot r" viewBox="0 0 20 26"><use href="#fp"/></svg>
+            <svg class="foot l" viewBox="0 0 20 26"><use href="#fp"/></svg>
+          </span>
+        </div>
+      </div>
+
+      <!-- PRAWDZIWY PODGLĄD APKI -->
+      <div class="appshot">
+        <div class="frame"><img src="app-preview.png" alt="Podgląd aplikacji SeaSteps" /></div>
+        <div class="float"><svg class="i" style="fill:var(--leaf)"><use href="#leaf"/></svg> natura ×3</div>
+      </div>
+    </header>
+
+    <!-- PROBLEM -->
+    <section>
+      <h2 class="h2">Znasz to uczucie?</h2>
+      <div class="grid3">
+        <div class="glass feat"><h3>Siedzisz cały dzień</h3><p>Praca, ekran, kanapa. Wiesz, że ruch by pomógł — ale samemu jakoś się nie chce.</p></div>
+        <div class="glass feat"><h3>„Poszłabym, ale nie sama"</h3><p>Najczęstszy powód, dla którego nie wychodzimy na spacer, to brak kompana — nie brak chęci.</p></div>
+        <div class="glass feat"><h3>Rozregulowany układ nerwowy</h3><p>Brak kontaktu z naturą i ludźmi to stres i przebodźcowanie. Natura realnie to wycisza.</p></div>
+      </div>
+    </section>
+
+    <!-- SOLUTION -->
+    <section>
+      <div class="solution">
+        <h2 class="h2">Spacer, który się opłaca — i robi dobrze Tobie i naturze</h2>
+        <p class="sub" style="max-width:none">To nie tylko punkty. Ruch realnie poprawia Twoje samopoczucie, a zebrane punkty możesz przeznaczyć na realne dobro — zasadzenie drzewa, adopcję foki albo zniżki od lokalnych sponsorów. Dbasz o siebie i o środowisko, a także nawiązujesz nowe kontakty i miło spędzasz czas.</p>
+        <div class="mult">
+          <div class="m"><span class="tile"><svg class="i"><use href="#fp"/></svg></span><div class="x">×1</div><div class="l">sam</div></div>
+          <div class="m"><span class="tile"><svg class="i"><use href="#users"/></svg></span><div class="x">×1.5</div><div class="l">z kimś</div></div>
+          <div class="m"><span class="tile"><svg class="i"><use href="#users"/></svg></span><div class="x">×2</div><div class="l">w grupie</div></div>
+          <div class="m"><span class="tile"><svg class="i"><use href="#leaf"/></svg></span><div class="x">×3</div><div class="l">w naturze</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- KORZYSCI -->
+    <section>
+      <h2 class="h2">Co dostajesz</h2>
+      <div class="grid4">
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#users"/></svg></span><h3>Ludzie obok</h3><p>Profil i zainteresowania łączą Cię z osobami na wspólny spacer, bieganie czy rozmowę.</p></div>
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#trophy"/></svg></span><h3>Gra, nie obowiązek</h3><p>Kroki, punkty, streak i cele. Ruch staje się lekki i wciągający.</p></div>
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#tree"/></svg></span><h3>Nagrody eko</h3><p>Zamieniaj punkty na realne dobro: posadź drzewo, adoptuj fokę, voucher od partnera.</p></div>
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#waves"/></svg></span><h3>Wspólne akcje</h3><p>Sprzątanie plaży, sadzenie drzew, akcje pro-Bałtyk — razem i z sensem.</p></div>
+      </div>
+    </section>
+
+    <!-- SCIENCE -->
+    <section>
+      <div class="science">
+        <span class="btn" style="background:rgba(255,255,255,.15); color:#fff; padding:8px 14px; font-size:12px;"><svg class="i" style="fill:#fff"><use href="#chart"/></svg> Oparte na badaniach</span>
+        <div class="sgrid">
+          <div><div class="num">r = 0,42</div><p>Więź z naturą realnie przekłada się na zachowania prośrodowiskowe (meta-analiza, 13 tys. osób).</p></div>
+          <div><div class="num">38 badań</div><p>Przywiązanie do konkretnego miejsca zwiększa troskę o nie. Bliskość rodzi troskę — nie moralizowanie.</p></div>
+          <div><div class="num">powroty &gt; wyjścia</div><p>Regularny, powtarzalny kontakt z naturą buduje trwałą więź. Dlatego nagradzamy powroty na tę samą plażę.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DLA KOGO -->
+    <section>
+      <div class="grid3">
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#heart"/></svg></span><h3>Dla ludzi</h3><p>Mieszkańców Trójmiasta i każdego, kto chce więcej ruchu, natury i kontaktu — bez presji i bez chodzenia samemu.</p></div>
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#building"/></svg></span><h3>Dla firm</h3><p>Wersja B2B: zespoły zbierają punkty wspólnie, nagrody ustalone z firmą (dzień wolny, gadżety). Wellbeing + integracja + eko.</p></div>
+        <div class="glass feat"><span class="tile"><svg class="i"><use href="#store"/></svg></span><h3>Dla lokalnych biznesów</h3><p>Kawiarnie, wypożyczalnie kajaków, food trucki nad wodą — zniżki do odebrania na miejscu ściągają ludzi nad morze.</p></div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="cta">
+      <div class="cta">
+        <h2>Zrób pierwszy krok do natury</h2>
+        <p>Dołącz jednym klikiem — bez hasła. Resztą zajmie się natura.</p>
+        <div class="ml">
+          <input type="email" placeholder="twój@email.pl" />
+          <a class="btn btn-primary" data-app href="#" style="background:#fff; color:var(--deep);"><svg class="i" style="fill:var(--deep)"><use href="#spark"/></svg> Wyślij magiczny link</a>
+        </div>
+      </div>
+    </section>
+
+    <footer>SeaSteps — Hack4Change 2026 · Gdańsk</footer>
+  </div>
+
+  <script>
+    /* ⬇️ ADRES APLIKACJI — podmień po wdrożeniu apki na Vercel,
+       np. "https://walk4change.vercel.app/" (teraz lokalny podgląd) */
+    var APP_URL = "http://localhost:5173/";
+    document.querySelectorAll("[data-app]").forEach(function (a) { a.setAttribute("href", APP_URL); });
+  </script>
+</body>
+</html>

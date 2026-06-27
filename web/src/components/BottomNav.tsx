@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { House, Footprints, UsersThree, CalendarHeart, UserCircle } from '@phosphor-icons/react'
 
 const items = [
-  { to: '/app', label: 'Start', icon: House, owns: ['/app', '/eco', '/partners'] },
+  { to: '/', label: 'Start', icon: House, owns: ['/', '/eco', '/partners'] },
   { to: '/walk', label: 'Spacer', icon: Footprints, owns: ['/walk', '/history'] },
   { to: '/community', label: 'Ludzie', icon: UsersThree, owns: ['/community'] },
   { to: '/events', label: 'Eventy', icon: CalendarHeart, owns: ['/events'] },
