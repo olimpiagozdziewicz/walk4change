@@ -64,6 +64,30 @@ pub async fn join_walk(
     Ok(response::data(serde_json::json!({})))
 }
 
+/// Body for `POST /api/v1/walks/join-by-code`.
+#[derive(Deserialize)]
+pub struct JoinByCodeRequest {
+    pub code: String,
+}
+
+/// `POST /api/v1/walks/join-by-code`
+///
+/// Join an active walk by its short `join_code`, WITHOUT requiring friendship.
+/// Powers the two-phone demo where strangers pair via a code. Returns the
+/// session id (`{ "data": { "session_id": <uuid> } }`).
+///
+/// Returns 200 on success (idempotent if already joined), 404 if no active
+/// session has that code.
+pub async fn join_by_code(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(body): Json<JoinByCodeRequest>,
+) -> Result<Json<Value>, AppError> {
+    let code = body.code.trim().to_uppercase();
+    let session_id = walk_repo::join_by_code(&state.pool, &code, auth.id).await?;
+    Ok(response::data(serde_json::json!({ "session_id": session_id })))
+}
+
 /// `POST /api/v1/walks/:id/leave`
 ///
 /// Leave a walk session by setting `left_at = now()`.

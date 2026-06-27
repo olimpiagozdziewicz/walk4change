@@ -112,6 +112,52 @@ pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
     Ok(())
 }
 
+/// Join an active walk session by its `join_code`, WITHOUT requiring friendship.
+///
+/// This powers the "join by code" demo flow where two strangers pair via a
+/// short code instead of a pre-existing friendship. Returns the session id so
+/// the caller can subscribe to its live feed.
+///
+/// Errors:
+/// - No active session with that code → 404.
+/// - `actor` already joined (UNIQUE violation) → idempotent success (returns id).
+pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid, AppError> {
+    let row: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, status FROM walk_sessions WHERE join_code = $1",
+    )
+    .bind(code)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::internal)?;
+
+    let (session_id, status) = row.ok_or(AppError::NotFound)?;
+    if status != "active" {
+        return Err(AppError::NotFound);
+    }
+
+    let participant_id = Uuid::new_v4();
+    let res = sqlx::query(
+        "INSERT INTO walk_participants (id, session_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(participant_id)
+    .bind(session_id)
+    .bind(actor)
+    .execute(pool)
+    .await;
+
+    if let Err(e) = res {
+        // Already a participant → idempotent: still return the session id.
+        if let sqlx::Error::Database(ref db) = e {
+            if db.is_unique_violation() {
+                return Ok(session_id);
+            }
+        }
+        return Err(AppError::internal(e));
+    }
+
+    Ok(session_id)
+}
+
 /// Set `left_at = now()` for `actor` in `session_id`.
 ///
 /// - 0 rows AND never a member → 404.
