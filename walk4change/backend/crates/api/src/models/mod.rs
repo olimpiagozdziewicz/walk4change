@@ -13,3 +13,18 @@ pub struct Profile {
     pub interests: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
+
+/// A pending friendship request bundled with the other party's profile.
+#[derive(Debug, Serialize)]
+pub struct PendingItem {
+    pub request_id: Uuid,
+    pub user: Profile,
+}
+
+/// Result of `GET /api/v1/friends`.
+#[derive(Debug, Serialize)]
+pub struct FriendsList {
+    pub accepted: Vec<Profile>,
+    pub incoming_pending: Vec<PendingItem>,
+    pub outgoing_pending: Vec<PendingItem>,
+}
