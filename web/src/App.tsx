@@ -8,6 +8,7 @@ import { Profile } from './screens/Profile'
 import { Eco } from './screens/Eco'
 import { History } from './screens/History'
 import { Partners } from './screens/Partners'
+import { Live } from './screens/Live'
 
 /** Apka otwiera się od razu w środku (logowanie jest na landingu, nie tutaj). */
 function App() {
@@ -16,6 +17,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/walk" element={<Walk />} />
+        <Route path="/live" element={<Live />} />
         <Route path="/community" element={<Community />} />
         <Route path="/events" element={<Events />} />
         <Route path="/eco" element={<Eco />} />

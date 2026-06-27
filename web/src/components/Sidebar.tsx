@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
-import { House, Footprints, UsersThree, CalendarHeart, Storefront, UserCircle } from '@phosphor-icons/react'
+import { House, Footprints, Broadcast, UsersThree, CalendarHeart, Storefront, UserCircle } from '@phosphor-icons/react'
 import { Logo } from './Logo'
 
 const items = [
   { to: '/', label: 'Start', icon: House, owns: ['/', '/eco'] },
   { to: '/walk', label: 'Spacer', icon: Footprints, owns: ['/walk', '/history'] },
+  { to: '/live', label: 'Na żywo', icon: Broadcast, owns: ['/live'] },
   { to: '/community', label: 'Ludzie', icon: UsersThree, owns: ['/community'] },
   { to: '/events', label: 'Eventy', icon: CalendarHeart, owns: ['/events'] },
   { to: '/partners', label: 'Partnerzy', icon: Storefront, owns: ['/partners'] },
