@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Footprints, Leaf, Users, ArrowRight } from 'lucide-react'
+import { Footprints, Leaf, UsersThree, ArrowRight } from '@phosphor-icons/react'
 import { BottomNav } from './BottomNav'
 import { Logo } from './Logo'
 import { FootstepTrail } from './Footsteps'
@@ -33,7 +33,7 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
         <div className="mt-8 space-y-3">
           <Value icon={<Footprints size={18} />} text="Każdy krok to punkty — nad wodą liczą się podwójnie" />
           <Value icon={<Leaf size={18} />} text="Bonus za naturę ×3, za spacer z kimś ×1.5" />
-          <Value icon={<Users size={18} />} text="Eventy, społeczność i nagrody dla Bałtyku" />
+          <Value icon={<UsersThree size={18} />} text="Eventy, społeczność i nagrody dla Bałtyku" />
         </div>
 
         <div className="mt-10 flex items-center gap-3 text-sm font-bold text-deep">

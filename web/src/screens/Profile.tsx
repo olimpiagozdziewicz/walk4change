@@ -1,33 +1,42 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, CalendarHeart, Waves, Settings } from 'lucide-react'
-import { ScreenHeader, Card, Pill } from '../components/ui'
+import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check } from '@phosphor-icons/react'
+import { Card, Pill } from '../components/ui'
 import { FootstepTrail } from '../components/Footsteps'
-import { api, type Profile as ProfileT } from '../lib/api'
+import { api, INTEREST_OPTIONS, type Profile as ProfileT } from '../lib/api'
+import { getInterests, saveInterests } from '../lib/interests'
 
 export function Profile() {
   const nav = useNavigate()
   const [p, setP] = useState<ProfileT | null>(null)
+  const [interests, setInterests] = useState<string[]>(getInterests())
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     api.getProfile().then(setP)
   }, [])
 
+  const toggle = (tag: string) =>
+    setInterests((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]))
+
+  const finishEdit = () => {
+    saveInterests(interests)
+    setEditing(false)
+  }
+
   if (!p) return null
 
   return (
     <div>
-      <ScreenHeader title="Profil" emoji="🌊" />
-
-      <div className="px-5">
+      <div className="px-5 pt-5">
         {/* identity card */}
         <Card className="relative overflow-hidden p-6 text-center">
           <div className="pointer-events-none absolute -right-2 top-2 opacity-30">
             <FootstepTrail count={5} color="#0f8b8d" />
           </div>
-          <button onClick={() => nav('/')} className="absolute right-4 top-4 text-muted">
-            <Settings size={18} />
+          <button onClick={() => nav('/')} className="absolute right-4 top-4 text-muted" aria-label="Ustawienia">
+            <GearSix size={20} />
           </button>
           <motion.div
             initial={{ scale: 0 }}
@@ -38,20 +47,66 @@ export function Profile() {
             {p.avatar}
           </motion.div>
           <h2 className="mt-3 font-display text-2xl font-bold text-ink">{p.name}</h2>
-          <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-            {p.interests.map((i) => (
-              <Pill key={i} tone="muted">
-                {i}
-              </Pill>
-            ))}
+
+          {/* interests */}
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-muted">Zainteresowania</span>
+            <button
+              onClick={() => (editing ? finishEdit() : setEditing(true))}
+              className="inline-flex items-center gap-1 rounded-full bg-sea/10 px-2.5 py-1 text-xs font-bold text-deep transition active:scale-95"
+            >
+              {editing ? (
+                <>
+                  <Check size={13} /> Gotowe
+                </>
+              ) : (
+                <>
+                  <PencilSimple size={13} /> Edytuj
+                </>
+              )}
+            </button>
           </div>
+
+          {editing ? (
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {INTEREST_OPTIONS.map((tag) => {
+                const on = interests.includes(tag)
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => toggle(tag)}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition active:scale-95 ${
+                      on ? 'bg-gradient-to-br from-sea to-leaf text-white shadow' : 'bg-white/70 text-muted'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {interests.length ? (
+                interests.map((i) => (
+                  <Pill key={i} tone="sea">
+                    {i}
+                  </Pill>
+                ))
+              ) : (
+                <span className="text-sm text-muted">Dodaj zainteresowania, by dopasować ludzi do spacerów 🌊</span>
+              )}
+            </div>
+          )}
+          {!editing && (
+            <p className="mt-3 text-xs text-muted">Na podstawie zainteresowań proponujemy Ci ludzi do wspólnych spacerów.</p>
+          )}
         </Card>
 
         {/* stats */}
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <StatCard icon={<Footprints size={20} />} value={p.stats.walks} label="spacerów" />
-          <StatCard icon={<CalendarHeart size={20} />} value={p.stats.events} label="eventów" />
-          <StatCard icon={<Waves size={20} />} value={p.stats.ecoReports} label="eko-zgłoszeń" />
+          <StatCard icon={<Footprints size={22} />} value={p.stats.walks} label="spacerów" />
+          <StatCard icon={<CalendarHeart size={22} />} value={p.stats.events} label="eventów" />
+          <StatCard icon={<Recycle size={22} />} value={p.stats.ecoReports} label="eko-zgłoszeń" />
         </div>
 
         {/* badges */}

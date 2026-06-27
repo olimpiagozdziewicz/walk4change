@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CaretLeft } from '@phosphor-icons/react'
 
 export function Card({
   children,
@@ -54,9 +56,30 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
   )
 }
 
-export function ScreenHeader({ title, subtitle, emoji }: { title: string; subtitle?: string; emoji?: string }) {
+export function ScreenHeader({
+  title,
+  subtitle,
+  emoji,
+  showBack = true,
+}: {
+  title: string
+  subtitle?: string
+  emoji?: string
+  showBack?: boolean
+}) {
+  const navigate = useNavigate()
+  const goBack = () => (window.history.length > 2 ? navigate(-1) : navigate('/'))
   return (
     <header className="px-5 pb-2 pt-4">
+      {showBack && (
+        <button
+          onClick={goBack}
+          aria-label="Wróć"
+          className="mb-2 inline-flex items-center gap-1 rounded-full glass py-1.5 pl-2 pr-3 text-sm font-bold text-deep transition active:scale-95"
+        >
+          <CaretLeft size={18} /> Wróć
+        </button>
+      )}
       <h1 className="font-display text-[28px] font-bold leading-none text-ink">
         {emoji && <span className="mr-2">{emoji}</span>}
         {title}

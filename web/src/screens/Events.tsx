@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import { MapPin, CalendarDays, Users } from 'lucide-react'
+import { MapPin, CalendarDots, UsersThree } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
 import { useMode } from '../lib/mode'
 import { api, type EventItem, type EventType } from '../lib/api'
@@ -50,13 +50,13 @@ export function Events() {
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 text-xs font-bold text-muted">
                   <span className="inline-flex items-center gap-1">
-                    <CalendarDays size={13} /> {e.date}
+                    <CalendarDots size={13} /> {e.date}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <MapPin size={13} /> {e.place}
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <Users size={13} /> {e.peopleCount} osób
+                    <UsersThree size={13} /> {e.peopleCount} osób
                   </span>
                 </div>
                 <div className="p-4 pt-3">

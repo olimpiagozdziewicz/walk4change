@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { Play, Square, Users, Leaf, Trophy, ArrowRight } from 'lucide-react'
+import { Play, Square, UsersThree, Leaf, Trophy, ArrowRight } from '@phosphor-icons/react'
 import { ScreenHeader, Card, PrimaryButton, SoftButton, Pill } from '../components/ui'
 import { FootstepTrail } from '../components/Footsteps'
 import { computeWalkPoints } from '../lib/api'
@@ -75,7 +75,7 @@ export function Walk() {
               <ToggleRow withSomeone={withSomeone} setWithSomeone={setWithSomeone} inNature={inNature} setInNature={setInNature} />
 
               <PrimaryButton onClick={start} className="mt-5 w-full py-4 text-base">
-                <Play size={20} fill="white" /> Rozpocznij spacer
+                <Play size={20} weight="fill" color="white" /> Rozpocznij spacer
               </PrimaryButton>
             </motion.div>
           )}
@@ -107,7 +107,7 @@ export function Walk() {
                     )}
                     {withSomeone && (
                       <Pill tone="sea">
-                        <Users size={12} /> z kimś ×1.5
+                        <UsersThree size={12} /> z kimś ×1.5
                       </Pill>
                     )}
                   </div>
@@ -120,7 +120,7 @@ export function Walk() {
                 onClick={stop}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6b4b4] bg-white/80 py-4 text-base font-bold text-[#c0504d] transition active:scale-[0.97]"
               >
-                <Square size={18} fill="#c0504d" /> Zakończ spacer
+                <Square size={18} weight="fill" color="#c0504d" /> Zakończ spacer
               </button>
             </motion.div>
           )}
@@ -192,7 +192,7 @@ function ToggleRow({
   return (
     <div className="mt-4 grid grid-cols-2 gap-3">
       <Toggle active={inNature} onClick={() => setInNature(!inNature)} icon={<Leaf size={18} />} label="W naturze" hint="×3" />
-      <Toggle active={withSomeone} onClick={() => setWithSomeone(!withSomeone)} icon={<Users size={18} />} label="Z kimś" hint="×1.5" />
+      <Toggle active={withSomeone} onClick={() => setWithSomeone(!withSomeone)} icon={<UsersThree size={18} />} label="Z kimś" hint="×1.5" />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { User, Building2 } from 'lucide-react'
+import { User, Buildings } from '@phosphor-icons/react'
 import { useMode } from '../lib/mode'
 
 export function ModeToggle() {
@@ -19,7 +19,7 @@ export function ModeToggle() {
           mode === 'team' ? 'bg-gradient-to-br from-sea to-deep text-white shadow' : 'text-muted'
         }`}
       >
-        <Building2 size={13} /> Firma
+        <Buildings size={13} /> Firma
       </button>
     </div>
   )

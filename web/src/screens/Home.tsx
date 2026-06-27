@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, Flame, Leaf, Users, CalendarHeart, AlertTriangle, Sparkles, Building2 } from 'lucide-react'
+import { Footprints, Flame, Leaf, UsersThree, CalendarHeart, Warning, Sparkle, Buildings } from '@phosphor-icons/react'
 import { Logo } from '../components/Logo'
 import { ModeToggle } from '../components/ModeToggle'
 import { FootstepTrail } from '../components/Footsteps'
@@ -117,7 +117,7 @@ export function Home() {
               </div>
               {isTeam ? (
                 <div className="mt-1 flex items-center gap-1.5 text-sm font-bold text-deep">
-                  <Building2 size={16} /> wynik zespołu dziś
+                  <Buildings size={16} /> wynik zespołu dziś
                 </div>
               ) : (
                 <div className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#c8761b]">
@@ -128,7 +128,7 @@ export function Home() {
                 {isTeam ? (
                   <>
                     <Pill tone="sea">
-                      <Users size={12} /> spacer grupowy ×{team?.teamMultiplier ?? 2}
+                      <UsersThree size={12} /> spacer grupowy ×{team?.teamMultiplier ?? 2}
                     </Pill>
                     <Pill tone="leaf">
                       <Leaf size={12} /> natura ×3
@@ -142,7 +142,7 @@ export function Home() {
                       </Pill>
                     )}
                     <Pill tone={today?.togetherBonusActive ? 'sea' : 'muted'}>
-                      <Users size={12} /> z kimś ×1.5
+                      <UsersThree size={12} /> z kimś ×1.5
                     </Pill>
                   </>
                 )}
@@ -166,7 +166,7 @@ export function Home() {
                   <div className="text-xs font-bold text-muted">{reward.kind}</div>
                 </div>
                 <Pill tone="sand">
-                  <Sparkles size={12} /> blisko!
+                  <Sparkle size={12} /> blisko!
                 </Pill>
               </div>
               <ProgressBar value={reward.progress} label={isTeam ? 'Wspólny postęp zespołu' : 'Postęp do nagrody'} />
@@ -192,7 +192,7 @@ export function Home() {
         <div className="grid grid-cols-3 gap-3">
           <ActionTile onClick={() => nav('/walk')} icon={<Footprints size={22} />} label="Spacer" primary />
           <ActionTile onClick={() => nav('/events')} icon={<CalendarHeart size={22} />} label="Event" />
-          <ActionTile onClick={() => nav('/eco')} icon={<AlertTriangle size={22} />} label="Zgłoś" />
+          <ActionTile onClick={() => nav('/eco')} icon={<Warning size={22} />} label="Zgłoś" />
         </div>
       </motion.div>
 

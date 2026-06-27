@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Footprints, Users, CalendarHeart, User } from 'lucide-react'
+import { House, Footprints, UsersThree, CalendarHeart, UserCircle } from '@phosphor-icons/react'
 
 const items = [
-  { to: '/', label: 'Start', icon: Home, end: true },
+  { to: '/', label: 'Start', icon: House, end: true },
   { to: '/walk', label: 'Spacer', icon: Footprints, end: false },
-  { to: '/community', label: 'Ludzie', icon: Users, end: false },
+  { to: '/community', label: 'Ludzie', icon: UsersThree, end: false },
   { to: '/events', label: 'Eventy', icon: CalendarHeart, end: false },
-  { to: '/profile', label: 'Profil', icon: User, end: false },
+  { to: '/profile', label: 'Profil', icon: UserCircle, end: false },
 ]
 
 export function BottomNav() {
@@ -26,7 +26,7 @@ export function BottomNav() {
                   isActive ? 'bg-gradient-to-br from-sea to-leaf text-white shadow-[0_8px_18px_rgba(15,139,141,0.35)]' : 'text-muted group-active:bg-sea/10'
                 }`}
               >
-                <Icon size={20} strokeWidth={2.4} />
+                <Icon size={23} weight={isActive ? 'fill' : 'duotone'} />
               </span>
               <span className={`text-[11px] font-bold ${isActive ? 'text-deep' : 'text-muted'}`}>{label}</span>
             </>

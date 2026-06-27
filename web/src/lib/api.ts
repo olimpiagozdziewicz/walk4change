@@ -153,6 +153,38 @@ const leaderboard: LeaderboardRow[] = [
   { rank: 4, name: 'Kamil', avatar: '🏃', points: 134 },
 ]
 
+// ── Ludzie do dopasowania (matching-lite) ─────────────────
+export interface MatchPerson {
+  id: string
+  name: string
+  avatar: string
+  interests: string[]
+  bio: string
+  distance: string
+}
+
+export const INTEREST_OPTIONS = [
+  'Spacery nad morzem',
+  'Natura',
+  'Mindfulness',
+  'Eko',
+  'Bieganie',
+  'Joga',
+  'Fotografia',
+  'Pies',
+  'Kawa i rozmowy',
+  'Sprzątanie plaż',
+  'Rower',
+  'Medytacja',
+]
+
+const people: MatchPerson[] = [
+  { id: 'p1', name: 'Marta', avatar: '🧘', interests: ['Mindfulness', 'Natura', 'Joga', 'Kawa i rozmowy'], bio: 'Poranne spacery dla resetu głowy.', distance: '1,2 km' },
+  { id: 'p2', name: 'Bek', avatar: '🚶', interests: ['Spacery nad morzem', 'Eko', 'Pies', 'Sprzątanie plaż'], bio: 'Chodzę z psem, sprzątam przy okazji.', distance: '800 m' },
+  { id: 'p3', name: 'Igor', avatar: '📷', interests: ['Fotografia', 'Natura', 'Spacery nad morzem'], bio: 'Łapię światło o wschodzie nad Zatoką.', distance: '2,4 km' },
+  { id: 'p4', name: 'Hania', avatar: '🌿', interests: ['Eko', 'Mindfulness', 'Medytacja', 'Natura'], bio: 'Wolne tempo, dużo zieleni.', distance: '600 m' },
+]
+
 // ── Wariant korporacyjny (B2B) ────────────────────────────
 export interface TeamToday {
   company: string
@@ -215,6 +247,7 @@ export const api = {
   getRewards: () => wait(rewards),
   getEcoReports: () => wait(ecoReports),
   getLeaderboard: () => wait(leaderboard),
+  getMatches: () => wait(people),
   // wariant korporacyjny
   getTeamToday: () => wait(teamToday),
   getTeamLeaderboard: () => wait(teamLeaderboard),
