@@ -12,7 +12,7 @@ const items = [
 export function BottomNav() {
   const { pathname } = useLocation()
   return (
-    <nav className="glass fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-around border-t border-white/70 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(12,90,113,0.08)] lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-around border-t border-black/5 bg-white/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(12,90,113,0.12)] backdrop-blur-xl lg:hidden">
       {items.map(({ to, label, icon: Icon, owns }) => {
         const isActive = owns.includes(pathname)
         return (

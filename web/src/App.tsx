@@ -1,5 +1,6 @@
 import { Routes, Route, Outlet } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { ScrollToTop } from './components/ScrollToTop'
 import { Login } from './screens/Login'
 import { Home } from './screens/Home'
 import { Walk } from './screens/Walk'
@@ -21,7 +22,9 @@ function AppLayout() {
 
 function App() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       {/* logowanie / zakładanie konta — pełny ekran, bez shellu */}
       <Route path="/login" element={<Login />} />
 
@@ -37,7 +40,8 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Home />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   )
 }
 

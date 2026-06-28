@@ -75,7 +75,7 @@ export function InstallModal() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-          className="glass fixed left-4 right-4 z-[60] rounded-3xl border border-white/70 p-4 shadow-[0_24px_60px_rgba(12,90,113,0.22)] sm:left-auto sm:right-6 sm:w-[330px] bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] sm:bottom-6"
+          className="fixed left-4 right-4 z-[60] rounded-3xl border border-black/5 bg-white p-4 shadow-[0_24px_60px_rgba(12,90,113,0.28)] sm:left-auto sm:right-6 sm:w-[330px] bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] sm:bottom-6"
         >
           <button onClick={dismiss} aria-label="Zamknij" className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full bg-sea/8 text-muted">
             <X size={14} weight="bold" />

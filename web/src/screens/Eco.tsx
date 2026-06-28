@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { Camera, MapPin, PaperPlaneTilt, CheckCircle, Warning, Sparkle, Leaf } from '@phosphor-icons/react'
+import { Camera, MapPin, PaperPlaneTilt, CheckCircle, Warning, Sparkle, Leaf, X } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { Celebrate } from '../components/Celebrate'
@@ -20,6 +20,8 @@ export function Eco() {
   const [rewards, setRewards] = useState<Reward[]>([])
   const [sent, setSent] = useState(false)
   const [desc, setDesc] = useState('')
+  const [photos, setPhotos] = useState<string[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.getEcoReports().then(setReports)
@@ -30,7 +32,51 @@ export function Eco() {
     setTab(t)
     setSent(false)
     setDesc('')
+    setPhotos([])
   }
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    files.forEach((f) => {
+      const r = new FileReader()
+      r.onload = () => setPhotos((p) => [...p, String(r.result)])
+      r.readAsDataURL(f)
+    })
+    e.target.value = ''
+  }
+
+  const removePhoto = (i: number) => setPhotos((p) => p.filter((_, idx) => idx !== i))
+
+  const PhotoStrip = ({ tone = 'sea' }: { tone?: 'sea' | 'leaf' }) => (
+    <div>
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onFile} />
+      <div className="no-scrollbar flex gap-2 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-dashed bg-white/50 text-deep transition active:scale-95 ${tone === 'leaf' ? 'border-leaf/40' : 'border-sea/40'}`}
+        >
+          <Camera size={20} />
+        </button>
+        {photos.map((p, i) => (
+          <div key={i} className="relative h-16 w-16 shrink-0">
+            <img src={p} alt="" className="h-16 w-16 rounded-2xl object-cover" />
+            <button
+              type="button"
+              onClick={() => removePhoto(i)}
+              className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-white text-muted shadow"
+              aria-label="Usuń"
+            >
+              <X size={11} weight="bold" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-xs text-muted">
+        {tab === 'done' ? 'Dodaj zdjęcia „przed / po" 📸' : 'Dodaj zdjęcie 📸'}
+      </p>
+    </div>
+  )
 
   return (
     <div>
@@ -99,10 +145,10 @@ export function Eco() {
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink outline-none placeholder:text-muted/70 focus:ring-2 focus:ring-sea/30"
               />
-              <div className="grid grid-cols-2 gap-2.5">
-                <UploadBtn icon={<Camera size={18} />} label="Zdjęcie" />
-                <UploadBtn icon={<MapPin size={18} />} label="Lokalizacja" />
-              </div>
+              <PhotoStrip />
+              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-sea/40 bg-white/50 py-2.5 text-sm font-bold text-deep">
+                <MapPin size={18} /> Dodaj lokalizację
+              </button>
               <PrimaryButton onClick={() => setSent(true)} className="w-full">
                 <PaperPlaneTilt size={18} /> Wyślij zgłoszenie
               </PrimaryButton>
@@ -125,10 +171,7 @@ export function Eco() {
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink outline-none placeholder:text-muted/70 focus:ring-2 focus:ring-leaf/30"
               />
-              <div className="grid grid-cols-2 gap-2.5">
-                <UploadBtn icon={<Camera size={18} />} label="Zdjęcie PRZED" tone="leaf" />
-                <UploadBtn icon={<Camera size={18} />} label="Zdjęcie PO" tone="leaf" />
-              </div>
+              <PhotoStrip tone="leaf" />
               <PrimaryButton onClick={() => setSent(true)} className="w-full bg-gradient-to-br from-leaf to-sea">
                 <Sparkle size={18} /> Pochwal się
               </PrimaryButton>
@@ -142,7 +185,7 @@ export function Eco() {
           <div className="space-y-2.5">
             {reports.map((r) => (
               <Card key={r.id} className="flex items-center gap-3 p-3.5">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-sea/10 text-sea">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sea/10 text-sea">
                   {r.status === 'cleaned' ? <Sparkle size={18} /> : <Leaf size={18} />}
                 </div>
                 <div className="flex-1">
@@ -174,14 +217,5 @@ export function Eco() {
         </div>
       </div>
     </div>
-  )
-}
-
-function UploadBtn({ icon, label, tone = 'sea' }: { icon: ReactNode; label: string; tone?: 'sea' | 'leaf' }) {
-  const border = tone === 'leaf' ? 'border-leaf/40' : 'border-sea/40'
-  return (
-    <button className={`flex items-center justify-center gap-2 rounded-2xl border border-dashed ${border} bg-white/50 py-3 text-sm font-bold text-deep`}>
-      {icon} {label}
-    </button>
   )
 }
