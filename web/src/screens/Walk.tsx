@@ -8,6 +8,7 @@ import { LiveMap, type MapWalker } from '../components/LiveMap'
 import { apiRequest, hasBackend, getToken } from '../lib/http'
 import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
+import { useStepCounter } from '../hooks/useStepCounter'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
 
@@ -66,7 +67,8 @@ export function Walk() {
   const seqRef = useRef(0)
   const watchRef = useRef<number | null>(null)
   const lastSentRef = useRef(0)
-  const [summary, setSummary] = useState<{ points: number; meters: number; together: boolean; nature: boolean } | null>(null)
+  const [summary, setSummary] = useState<{ points: number; meters: number; steps: number; together: boolean; nature: boolean } | null>(null)
+  const { steps, source: stepSource, permissionNeeded, requestPermission, addMeters, reset: resetSteps } = useStepCounter()
 
   useEffect(() => {
     if (phase === 'active') {
@@ -85,17 +87,19 @@ export function Walk() {
     const map = walkersRef.current
     const prev = map.get(p.user_id)
     const idx = prev ? 0 : map.size
+    const seg = parseFloat(p.segment_meters)
     map.set(p.user_id, {
       userId: p.user_id,
       name: nameFor(p.user_id),
       color: prev?.color ?? COLORS[idx % COLORS.length],
       trail: [...(prev?.trail ?? []), p.point].slice(-50),
       points: parseFloat(p.participant_total),
-      meters: (prev?.meters ?? 0) + parseFloat(p.segment_meters),
+      meters: (prev?.meters ?? 0) + seg,
       together: parseFloat(p.together_mult),
       nature: parseFloat(p.nature_mult),
       isMe: p.user_id === currentUserId(),
     })
+    if (p.user_id === currentUserId()) addMeters(seg)
     flush()
   }
 
@@ -136,7 +140,7 @@ export function Walk() {
   const connectAndStream = (id: string) => {
     socketRef.current?.close()
     walkersRef.current = new Map(); flush()
-    seqRef.current = 0; setSec(0); setSummary(null)
+    seqRef.current = 0; setSec(0); setSummary(null); resetSteps()
     const sock = new LiveSocket({
       onOpen: () => { sock.subscribeSession(id); sock.subscribeLeaderboard() },
       onPingScored: onPing,
@@ -199,7 +203,7 @@ export function Walk() {
 
   const stopWalk = async () => {
     const mine = me()
-    setSummary({ points: mine?.points ?? 0, meters: mine?.meters ?? 0, together: (mine?.together ?? 1) > 1, nature: (mine?.nature ?? 1) > 1 })
+    setSummary({ points: mine?.points ?? 0, meters: mine?.meters ?? 0, steps, together: (mine?.together ?? 1) > 1, nature: (mine?.nature ?? 1) > 1 })
     stopStreaming()
     try { await apiRequest(`/walks/${sessionId}/stop`, { method: 'POST' }) } catch { /* non-host */ }
     try { await apiRequest(`/walks/${sessionId}/leave`, { method: 'POST' }) } catch { /* ignore */ }
@@ -278,15 +282,22 @@ export function Walk() {
                   <div className="mt-3 font-display text-6xl font-bold tabular-nums tracking-tight text-deep">{fmt(sec)}</div>
                   <div className="mt-1 text-sm font-bold text-muted">czas spaceru</div>
                 </div>
-                <div className="mt-6 grid grid-cols-2 gap-3">
+                <div className="mt-6 grid grid-cols-3 gap-3">
+                  <Stat label="kroki" value={steps.toLocaleString('pl-PL')} accent />
                   <Stat label="metry" value={Math.round(mine?.meters ?? 0).toLocaleString('pl-PL')} />
                   <Stat label="punkty" value={(mine?.points ?? 0).toFixed(1)} accent />
                 </div>
-                <div className="mt-3 flex justify-center gap-2">
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
                   <Pill tone="leaf"><Leaf size={12} /> natura ×{mine?.nature ?? 1}</Pill>
                   <Pill tone="sea"><UsersThree size={12} /> we dwoje ×{mine?.together ?? 1}</Pill>
                   {combined > 1 && <Pill tone="sand">razem ×{combined.toFixed(1)}</Pill>}
+                  <Pill tone="muted"><Footprints size={12} /> {stepSource === 'accelerometer' ? 'sensor' : 'GPS'}</Pill>
                 </div>
+                {permissionNeeded && (
+                  <button onClick={requestPermission} className="mt-3 w-full rounded-2xl bg-sea/10 py-2 text-xs font-bold text-sea">
+                    Zezwól na ruch, by liczyć kroki dokładniej →
+                  </button>
+                )}
                 {gpsNote && <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><MapPin size={14} weight="fill" /> {gpsNote}</p>}
                 {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
               </Card>
@@ -325,7 +336,7 @@ export function Walk() {
               <Card className="mt-2 overflow-hidden p-6 text-center">
                 <motion.div initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', delay: 0.1 }} className="mx-auto mb-3 grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-sea to-leaf shadow-[0_16px_30px_rgba(15,139,141,0.3)]"><Trophy size={36} color="white" /></motion.div>
                 <h2 className="font-display text-2xl font-bold text-ink">Brawo, spacer zaliczony!</h2>
-                <p className="mt-1 text-sm text-muted">{fmt(sec)} • {Math.round(summary.meters).toLocaleString('pl-PL')} m</p>
+                <p className="mt-1 text-sm text-muted">{fmt(sec)} • {summary.steps > 0 ? `${summary.steps.toLocaleString('pl-PL')} kroków • ` : ''}{Math.round(summary.meters).toLocaleString('pl-PL')} m</p>
                 <div className="mt-5 rounded-3xl bg-gradient-to-br from-sea/10 to-leaf/10 p-5">
                   <div className="font-display text-5xl font-bold text-sea">+{summary.points.toFixed(1)}</div>
                   <div className="text-sm font-bold text-muted">punktów zdobytych</div>
