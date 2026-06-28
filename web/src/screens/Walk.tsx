@@ -221,7 +221,9 @@ export function Walk() {
 
   const stopWalk = async () => {
     const mine = me()
-    setSummary({ points: mine?.points ?? 0, meters: mine?.meters ?? 0, steps, together: (mine?.together ?? 1) > 1, nature: (mine?.nature ?? 1) > 1 })
+    const nat = mine?.nature ?? 1
+    const tog = mine?.together ?? 1
+    setSummary({ points: Math.round(steps * nat * tog), meters: mine?.meters ?? 0, steps, together: tog > 1, nature: nat > 1 })
     stopStreaming()
     try { await apiRequest(`/walks/${sessionId}/stop`, { method: 'POST' }) } catch { /* non-host */ }
     try { await apiRequest(`/walks/${sessionId}/leave`, { method: 'POST' }) } catch { /* ignore */ }
@@ -240,6 +242,7 @@ export function Walk() {
 
   const mine = me()
   const combined = walkers.reduce((m, w) => Math.max(m, w.together * w.nature), 0)
+  const displayPoints = Math.round(steps * (mine?.nature ?? 1) * (mine?.together ?? 1))
 
   return (
     <div>
@@ -303,7 +306,7 @@ export function Walk() {
                 <div className="mt-6 grid grid-cols-3 gap-3">
                   <Stat label="kroki" value={steps.toLocaleString('pl-PL')} accent />
                   <Stat label="metry" value={Math.round(mine?.meters ?? 0).toLocaleString('pl-PL')} />
-                  <Stat label="punkty" value={(mine?.points ?? 0).toFixed(1)} accent />
+                  <Stat label="punkty" value={displayPoints.toLocaleString('pl-PL')} accent />
                 </div>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   <Pill tone="leaf"><Leaf size={12} /> natura ×{mine?.nature ?? 1}</Pill>
@@ -356,7 +359,7 @@ export function Walk() {
                 <h2 className="font-display text-2xl font-bold text-ink">Brawo, spacer zaliczony!</h2>
                 <p className="mt-1 text-sm text-muted">{fmt(sec)} • {summary.steps > 0 ? `${summary.steps.toLocaleString('pl-PL')} kroków • ` : ''}{Math.round(summary.meters).toLocaleString('pl-PL')} m</p>
                 <div className="mt-5 rounded-3xl bg-gradient-to-br from-sea/10 to-leaf/10 p-5">
-                  <div className="font-display text-5xl font-bold text-sea">+{summary.points.toFixed(1)}</div>
+                  <div className="font-display text-5xl font-bold text-sea">+{summary.points.toLocaleString('pl-PL')}</div>
                   <div className="text-sm font-bold text-muted">punktów zdobytych</div>
                   <div className="mt-2 flex justify-center gap-2">
                     {summary.nature && <Pill tone="leaf"><Leaf size={12} /> natura ×3</Pill>}
