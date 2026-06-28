@@ -85,7 +85,7 @@ export function Home() {
       </motion.div>
 
       {/* greeting */}
-      <motion.div {...fade(1)} className="mt-5">
+      <motion.div key={isTeam ? 'greeting-team' : 'greeting-ja'} {...fade(1)} className="mt-5">
         {isTeam ? (
           <>
             <p className="font-display text-[26px] font-semibold leading-tight text-ink">Cześć, {team?.teamName}</p>
@@ -102,7 +102,7 @@ export function Home() {
       </motion.div>
 
       {/* hero stat */}
-      <motion.div {...fade(2)} className="mt-4">
+      <motion.div key={isTeam ? 'stat-team' : 'stat-ja'} {...fade(2)} className="mt-4">
         <Card className="relative overflow-hidden p-5">
           <div className="pointer-events-none absolute -right-6 top-2 opacity-40">
             <FootstepTrail count={5} color="#58b86c" />
@@ -169,7 +169,7 @@ export function Home() {
         const reward = isTeam ? teamRewards[0] : rewards[0]
         if (!reward) return null
         return (
-          <motion.div {...fade(3)} className="mt-4">
+          <motion.div key={isTeam ? 'reward-team' : 'reward-ja'} {...fade(3)} className="mt-4">
             <Card className="p-5">
               <div className="mb-3 flex items-center gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sand/25 text-[#c8761b]">
