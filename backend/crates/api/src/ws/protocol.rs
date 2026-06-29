@@ -16,6 +16,10 @@ pub enum ClientFrame {
         lat: f64,
         lng: f64,
         recorded_at: DateTime<Utc>,
+        /// GPS accuracy radius in meters (lower is better). Optional for
+        /// backward compatibility; when present, poor-accuracy pings are dropped.
+        #[serde(default)]
+        accuracy: Option<f64>,
     },
     Subscribe {
         session_id: Uuid,

@@ -31,6 +31,7 @@ CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-*}"
 echo "==> (re)starting API container against Supabase"
 docker rm -f walk4change-prod >/dev/null 2>&1 || true
 docker run -d --name walk4change-prod --restart unless-stopped \
+  --memory=256m --memory-swap=256m \
   -e DATABASE_URL="$DATABASE_URL" \
   -e JWT_SECRET="$JWT_SECRET" \
   -e BIND_ADDR="0.0.0.0:8080" \

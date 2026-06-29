@@ -19,6 +19,13 @@ pub struct ScoringConfig {
     pub stack: bool,
     /// Maximum plausible walking/running speed in m/s; segments above this are dropped.
     pub max_speed_mps: f64,
+    /// GPS-jitter deadband (meters): segments shorter than this are treated as
+    /// noise (stationary drift) and credited zero distance.
+    pub min_segment_meters: f64,
+    /// Maximum acceptable GPS accuracy radius (meters). Pings reported with a
+    /// worse (larger) accuracy are dropped before scoring — a poor fix drifts
+    /// several metres while standing still and would otherwise mint points.
+    pub max_accuracy_meters: f64,
     /// Window (seconds) for counting companions active in the same session.
     pub ping_window_secs: i64,
     /// Maximum allowed clock skew (seconds) between client `recorded_at` and server time.
@@ -37,6 +44,8 @@ impl Default for ScoringConfig {
             nature_default: Decimal::new(3, 0),         // 3.0
             stack: true,
             max_speed_mps: 8.0,                          // ~28.8 km/h (fast run)
+            min_segment_meters: 5.0,                     // GPS jitter deadband
+            max_accuracy_meters: 35.0,                   // drop poor-fix pings
             ping_window_secs: 60,
             recorded_at_tolerance_secs: 45,
             max_points_per_second: Decimal::new(5, 0),  // 5.0 pt/s ceiling
@@ -52,6 +61,16 @@ impl ScoringConfig {
         if let Ok(v) = std::env::var("SCORING_MAX_SPEED_MPS") {
             if let Ok(n) = v.parse::<f64>() {
                 cfg.max_speed_mps = n;
+            }
+        }
+        if let Ok(v) = std::env::var("SCORING_MIN_SEGMENT_METERS") {
+            if let Ok(n) = v.parse::<f64>() {
+                cfg.min_segment_meters = n;
+            }
+        }
+        if let Ok(v) = std::env::var("SCORING_MAX_ACCURACY_METERS") {
+            if let Ok(n) = v.parse::<f64>() {
+                cfg.max_accuracy_meters = n;
             }
         }
         if let Ok(v) = std::env::var("SCORING_PING_WINDOW_SECS") {

@@ -209,6 +209,15 @@ pub fn build_app(state: AppState) -> Router {
             "/api/v1/me",
             get(routes::profile::get_me).patch(routes::profile::patch_me),
         )
+        .route("/api/v1/me/stats", get(routes::stats::get_me_stats))
+        .route(
+            "/api/v1/eco/reports",
+            get(routes::eco::list_reports).post(routes::eco::create_report),
+        )
+        .route(
+            "/api/v1/me/eco-reports",
+            get(routes::eco::list_my_reports),
+        )
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))
         .route("/api/v1/friends", get(routes::friends::list))

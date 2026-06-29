@@ -20,6 +20,8 @@ pub struct PingInput {
     pub lat: f64,
     pub lng: f64,
     pub recorded_at: DateTime<Utc>,
+    /// Reported GPS accuracy radius (meters); `None` when the client omits it.
+    pub accuracy: Option<f64>,
 }
 
 /// Result of scoring a ping that was actually persisted.
@@ -99,6 +101,15 @@ pub async fn score_ping(
     input: PingInput,
 ) -> Result<Option<PingScore>, AppError> {
     validate(cfg, &input)?;
+
+    // Drop poor-fix pings: a large accuracy radius means the position can drift
+    // several metres while standing still, minting phantom distance/points.
+    // Returning `None` keeps the previous good ping as the segment anchor.
+    if let Some(acc) = input.accuracy {
+        if acc > cfg.max_accuracy_meters {
+            return Ok(None);
+        }
+    }
 
     let mut tx = pool.begin().await.map_err(AppError::internal)?;
 

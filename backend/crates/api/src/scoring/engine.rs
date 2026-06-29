@@ -29,6 +29,9 @@ pub fn together_mult(cfg: &ScoringConfig, companions: i32) -> Decimal {
 
 /// Scores a single GPS segment.
 ///
+/// Jitter deadband: if `segment_meters < min_segment_meters`, the movement is
+/// indistinguishable from stationary GPS drift, so effective_meters = 0.
+///
 /// Teleport guard: if `dt_secs <= 0` or `segment_meters / dt_secs > max_speed_mps`,
 /// effective_meters is set to zero and points = 0.
 ///
@@ -41,6 +44,7 @@ pub fn score_segment(cfg: &ScoringConfig, input: &SpatialInput) -> ScoredSegment
     let tm = together_mult(cfg, input.companions);
 
     let effective_meters = if input.dt_secs <= 0.0
+        || input.segment_meters < cfg.min_segment_meters
         || input.segment_meters / input.dt_secs > cfg.max_speed_mps
     {
         Decimal::ZERO
@@ -217,6 +221,36 @@ mod tests {
         let seg = score_segment(&cfg, &input);
         assert_eq!(seg.effective_meters, Decimal::ZERO);
         assert_eq!(seg.points, Decimal::ZERO);
+    }
+
+    #[test]
+    fn jitter_below_deadband_returns_zero() {
+        // 3 m over 4 s — slow enough to pass the speed cap, but under the 5 m
+        // deadband → treated as stationary GPS drift, zero credit.
+        let cfg = default_cfg();
+        let input = SpatialInput {
+            segment_meters: 3.0,
+            dt_secs: 4.0,
+            nature_mult: Decimal::new(3, 0),
+            companions: 1,
+        };
+        let seg = score_segment(&cfg, &input);
+        assert_eq!(seg.effective_meters, Decimal::ZERO);
+        assert_eq!(seg.points, Decimal::ZERO);
+    }
+
+    #[test]
+    fn segment_at_deadband_threshold_counts() {
+        // Exactly the floor (5 m) is credited (strict `<` comparison).
+        let cfg = default_cfg();
+        let input = SpatialInput {
+            segment_meters: cfg.min_segment_meters,
+            dt_secs: 10.0,
+            nature_mult: Decimal::new(1, 0),
+            companions: 0,
+        };
+        let seg = score_segment(&cfg, &input);
+        assert!(seg.effective_meters > Decimal::ZERO);
     }
 
     #[test]

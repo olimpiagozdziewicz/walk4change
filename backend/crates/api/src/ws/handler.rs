@@ -121,6 +121,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         lat,
                         lng,
                         recorded_at,
+                        accuracy,
                     } => {
                         handle_ping(
                             &mut sender,
@@ -131,6 +132,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             lat,
                             lng,
                             recorded_at,
+                            accuracy,
                             &out_tx,
                             &mut subscriptions,
                             &mut forwarders,
@@ -266,6 +268,7 @@ async fn handle_ping(
     lat: f64,
     lng: f64,
     recorded_at: chrono::DateTime<chrono::Utc>,
+    accuracy: Option<f64>,
     out_tx: &mpsc::UnboundedSender<ServerFrame>,
     subscriptions: &mut HashSet<Uuid>,
     forwarders: &mut Vec<JoinHandle<()>>,
@@ -298,6 +301,7 @@ async fn handle_ping(
         lat,
         lng,
         recorded_at,
+        accuracy,
     };
 
     let score = match score_ping(&state.pool, &state.config.scoring, input).await {

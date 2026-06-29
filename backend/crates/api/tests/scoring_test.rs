@@ -126,6 +126,7 @@ async fn first_ping_has_no_prev_and_scores_zero() {
             lat: ORIGIN_LAT,
             lng: ORIGIN_LNG,
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await
@@ -167,6 +168,7 @@ async fn second_ping_in_nature_zone_scores() {
             lat: ORIGIN_LAT,
             lng: EAST_100M_LNG,
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await
@@ -215,6 +217,7 @@ async fn teleport_scores_zero() {
             lat: ORIGIN_LAT,
             lng: 19.4, // ~100 km east
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await
@@ -296,6 +299,7 @@ async fn companions_apply_together_multiplier() {
             lat: ORIGIN_LAT,
             lng: EAST_100M_LNG,
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await
@@ -332,6 +336,7 @@ async fn per_second_ceiling_clamps_points() {
             lat: ORIGIN_LAT,
             lng: EAST_100M_LNG,
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await
@@ -387,6 +392,7 @@ async fn invalid_coords_are_rejected() {
             lat: 999.0,
             lng: ORIGIN_LNG,
             recorded_at: chrono::Utc::now(),
+            accuracy: None,
         },
     )
     .await;
