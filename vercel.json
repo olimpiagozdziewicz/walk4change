@@ -1,0 +1,14 @@
+{
+  "buildCommand": "bash scripts/build-site.sh",
+  "outputDirectory": "site",
+  "rewrites": [
+    {
+      "source": "/app",
+      "destination": "/app/index.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/app/index.html"
+    }
+  ]
+}
