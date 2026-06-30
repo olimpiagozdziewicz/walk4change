@@ -47,3 +47,26 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # GitOps deploy: bump the image tag in the Helm chart that ArgoCD watches.
+      # ArgoCD (automated sync, prune+selfHeal) rolls the new image onto k3s.
+      # Requires repo secret HELM_DEPLOY_TOKEN — a PAT with write access to the
+      # helm repo (kamilandrzejrybacki-inc/helm).
+      - name: Bump Helm image tag (triggers ArgoCD deploy)
+        env:
+          HELM_REPO: kamilandrzejrybacki-inc/helm
+          GH_TOKEN: ${{ secrets.HELM_DEPLOY_TOKEN }}
+        run: |
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          rm -rf /tmp/helm
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${HELM_REPO}.git" /tmp/helm
+          cd /tmp/helm
+
+          sed -i "s|^  tag:.*|  tag: \"${SHA_TAG}\"|" charts/walk4change/values.yaml
+
+          git config user.email "ci@github.com"
+          git config user.name "GitHub Actions"
+          git add charts/walk4change/values.yaml
+          git diff --cached --quiet || git commit -m "ci(walk4change): deploy ${SHA_TAG} [skip ci]"
+          git push
