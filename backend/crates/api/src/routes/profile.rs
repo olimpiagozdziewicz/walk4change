@@ -48,15 +48,38 @@ pub async fn patch_me(
     State(state): State<AppState>,
     Json(body): Json<PatchMeRequest>,
 ) -> Result<Json<Value>, AppError> {
+    let mut errors: Vec<FieldError> = Vec::new();
+
     // Validate: if display_name is supplied it must not be blank.
     if let Some(ref name) = body.display_name {
         if name.trim().is_empty() {
-            return Err(AppError::Validation(vec![FieldError {
+            errors.push(FieldError {
                 field: "display_name".into(),
                 message: "must not be empty".into(),
                 code: "REQUIRED".into(),
-            }]));
+            });
         }
+        crate::util::validate::check_max_len(&mut errors, "display_name", name.trim(), 80);
+    }
+    if let Some(ref bio) = body.bio {
+        crate::util::validate::check_max_len(&mut errors, "bio", bio, 500);
+    }
+    if let Some(ref interests) = body.interests {
+        if interests.len() > 20 {
+            errors.push(FieldError {
+                field: "interests".into(),
+                message: "at most 20 items".into(),
+                code: "INVALID_LENGTH".into(),
+            });
+        }
+        for it in interests {
+            crate::util::validate::check_max_len(&mut errors, "interests", it, 40);
+        }
+    }
+    crate::util::validate::check_optional_url(&mut errors, "avatar_url", body.avatar_url.as_deref());
+
+    if !errors.is_empty() {
+        return Err(AppError::Validation(errors));
     }
 
     let patch = user_repo::ProfilePatch {

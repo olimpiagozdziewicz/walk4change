@@ -26,7 +26,6 @@ pub mod state;
 pub mod util;
 pub mod ws;
 
-use auth::extractor::AuthUser;
 use state::AppState;
 use util::ratelimit::RateLimiter;
 
@@ -198,7 +197,6 @@ pub fn build_app(state: AppState) -> Router {
 
     Router::new()
         .route("/api/v1/health", get(|| async { "ok" }))
-        .route("/api/v1/_whoami", get(whoami))
         .route("/api/v1/auth/register", post(auth::handlers::register))
         .route("/api/v1/auth/login", post(auth::handlers::login))
         .route("/api/v1/auth/logout", post(auth::handlers::logout))
@@ -253,8 +251,4 @@ pub fn build_app(state: AppState) -> Router {
         .layer(middleware::from_fn(security_headers))
         // Outermost — traces the full request round-trip including all middleware.
         .layer(TraceLayer::new_for_http())
-}
-
-async fn whoami(auth: AuthUser) -> axum::Json<serde_json::Value> {
-    response::data(auth.id)
 }

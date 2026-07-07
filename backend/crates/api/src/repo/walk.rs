@@ -122,18 +122,20 @@ pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
 /// - No active session with that code → 404.
 /// - `actor` already joined (UNIQUE violation) → idempotent success (returns id).
 pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid, AppError> {
-    let row: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, status FROM walk_sessions WHERE join_code = $1",
+    // A join code is only valid while the session is active AND started within
+    // the last 24h. This bounds the window in which a leaked code grants access
+    // to the session's live feed and GPS track (security audit 2026-07-08).
+    let row: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM walk_sessions \
+         WHERE join_code = $1 AND status = 'active' \
+           AND started_at > now() - interval '24 hours'",
     )
     .bind(code)
     .fetch_optional(pool)
     .await
     .map_err(AppError::internal)?;
 
-    let (session_id, status) = row.ok_or(AppError::NotFound)?;
-    if status != "active" {
-        return Err(AppError::NotFound);
-    }
+    let (session_id,) = row.ok_or(AppError::NotFound)?;
 
     let participant_id = Uuid::new_v4();
     let res = sqlx::query(

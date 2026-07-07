@@ -45,13 +45,19 @@ pub async fn register(
 ) -> Result<(StatusCode, HeaderMap, Json<Value>), AppError> {
     let mut errors: Vec<FieldError> = Vec::new();
 
-    if !body.email.contains('@') {
+    // Normalize the email the same way magic_request/supabase_exchange do, so a
+    // single address can't spawn duplicate accounts differing only by case.
+    let email = body.email.trim().to_lowercase();
+    let display_name = body.display_name.trim();
+
+    if !email.contains('@') {
         errors.push(FieldError {
             field: "email".into(),
             message: "must contain @".into(),
             code: "INVALID_EMAIL".into(),
         });
     }
+    crate::util::validate::check_max_len(&mut errors, "email", &email, 254);
     if body.password.len() < 8 || body.password.len() > 128 {
         errors.push(FieldError {
             field: "password".into(),
@@ -59,13 +65,14 @@ pub async fn register(
             code: "INVALID_LENGTH".into(),
         });
     }
-    if body.display_name.trim().is_empty() {
+    if display_name.is_empty() {
         errors.push(FieldError {
             field: "display_name".into(),
             message: "must not be empty".into(),
             code: "REQUIRED".into(),
         });
     }
+    crate::util::validate::check_max_len(&mut errors, "display_name", display_name, 80);
 
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
@@ -73,7 +80,7 @@ pub async fn register(
 
     let id = Uuid::new_v4();
     let password_hash = password::hash(&state.config, &body.password)?;
-    user_repo::create(&state.pool, id, &body.email, &password_hash, &body.display_name).await?;
+    user_repo::create(&state.pool, id, &email, &password_hash, display_name).await?;
 
     let profile = user_repo::get_profile(&state.pool, id).await?;
     let token = jwt::encode(&state.config, id)?;

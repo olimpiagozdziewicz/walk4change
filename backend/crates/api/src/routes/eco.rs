@@ -86,6 +86,18 @@ pub async fn create_report(
     // A report problem starts 'reported'; a cleanup brag is 'cleaned'.
     let status = if kind == "cleanup" { "cleaned" } else { "reported" };
 
+    // Length + URL validation (security audit 2026-07-08).
+    let mut errors: Vec<FieldError> = Vec::new();
+    crate::util::validate::check_max_len(&mut errors, "category", body.category.trim(), 40);
+    crate::util::validate::check_max_len(&mut errors, "description", body.description.trim(), 1000);
+    crate::util::validate::check_max_len(&mut errors, "location", body.location.trim(), 200);
+    crate::util::validate::check_optional_url(&mut errors, "photo_url", body.photo_url.as_deref());
+    crate::util::validate::check_optional_url(&mut errors, "photo_before_url", body.photo_before_url.as_deref());
+    crate::util::validate::check_optional_url(&mut errors, "photo_after_url", body.photo_after_url.as_deref());
+    if !errors.is_empty() {
+        return Err(AppError::Validation(errors));
+    }
+
     let row: EcoRow = sqlx::query_as(&format!(
         "INSERT INTO eco_reports \
             (user_id, kind, category, description, location, status, \
