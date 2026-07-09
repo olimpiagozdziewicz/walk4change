@@ -46,6 +46,15 @@ const WS_AUTH_TIMEOUT: Duration = Duration::from_secs(10);
 /// Maximum accepted size of a single inbound text frame (16 KiB).
 const MAX_WS_FRAME_BYTES: usize = 16 * 1024;
 
+/// Minimum interval accepted between two processed `Ping` frames on a single
+/// connection. The HTTP rate-limit middleware only covers the upgrade
+/// request — once upgraded, inbound `Ping` frames would otherwise be
+/// unthrottled, and each one runs several sequential DB queries against a
+/// small pool. The client legitimately pings roughly once every 4s, so a
+/// floor of 1/s is very safe and never affects real users (security
+/// hardening 2026-07-09).
+const WS_PING_MIN_INTERVAL: Duration = Duration::from_millis(1000);
+
 /// Axum entry point: upgrade the connection and hand off to [`handle_socket`].
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -66,6 +75,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let mut subscriptions: HashSet<Uuid> = HashSet::new();
     let mut leaderboard_subscribed = false;
     let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+    // Per-connection throttle state for inbound `Ping` frames (local to this
+    // task — no shared state needed, see `WS_PING_MIN_INTERVAL`).
+    let mut last_ping_at: Option<tokio::time::Instant> = None;
 
     loop {
         tokio::select! {
@@ -123,6 +135,19 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         recorded_at,
                         accuracy,
                     } => {
+                        // Per-connection throttle: silently drop pings that arrive
+                        // faster than WS_PING_MIN_INTERVAL, before they reach the
+                        // DB-backed authz/scoring path. Real clients ping ~1/4s,
+                        // so this never affects legitimate traffic.
+                        let now = tokio::time::Instant::now();
+                        let too_fast = last_ping_at
+                            .map(|prev| now.duration_since(prev) < WS_PING_MIN_INTERVAL)
+                            .unwrap_or(false);
+                        if too_fast {
+                            continue;
+                        }
+                        last_ping_at = Some(now);
+
                         handle_ping(
                             &mut sender,
                             &state,

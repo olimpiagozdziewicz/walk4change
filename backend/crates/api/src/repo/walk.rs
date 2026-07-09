@@ -11,6 +11,21 @@ use crate::{
 /// Base-32 alphabet (RFC 4648).
 const BASE32_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+/// Maximum rows returned by [`track`], regardless of the client-supplied
+/// `limit`. The default request (no `limit` param) asks for 1000, so the cap
+/// is kept well above that to avoid changing normal behaviour — it only
+/// stops a negative/huge `limit` from reaching the SQL `LIMIT` clause
+/// unbounded (security hardening 2026-07-09).
+const MAX_TRACK_LIMIT: i64 = 2000;
+
+/// Maximum number of concurrently active (non-left) participants allowed in
+/// a single walk session when joining via [`join_by_code`] (no friendship
+/// gate). Generous on purpose — the real two-phone/group demo is far below
+/// this — but stops one actor from stuffing dozens of sockpuppet accounts
+/// into a session via a leaked/guessed join code (security hardening
+/// 2026-07-09).
+const MAX_ACTIVE_PARTICIPANTS_PER_SESSION: i64 = 10;
+
 /// Generate a random 8-character base-32 join code.
 fn random_join_code() -> String {
     let mut rng = rand::thread_rng();
@@ -136,6 +151,40 @@ pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid
     .map_err(AppError::internal)?;
 
     let (session_id,) = row.ok_or(AppError::NotFound)?;
+
+    // Idempotent fast path: an actor who is already an active participant may
+    // "rejoin" via the same code without being counted against the cap below
+    // (the INSERT further down will just hit the UNIQUE violation and return
+    // the session id as before).
+    let already_active: bool = sqlx::query_scalar(
+        "SELECT EXISTS( \
+            SELECT 1 FROM walk_participants \
+            WHERE session_id = $1 AND user_id = $2 AND left_at IS NULL \
+        )",
+    )
+    .bind(session_id)
+    .bind(actor)
+    .fetch_one(pool)
+    .await
+    .map_err(AppError::internal)?;
+
+    if !already_active {
+        // Cap active participants per session (security audit 2026-07-09):
+        // prevents one actor from farming a leaked join code with dozens of
+        // sockpuppet accounts. Generous limit — real demo groups are tiny.
+        let active_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM walk_participants \
+             WHERE session_id = $1 AND left_at IS NULL",
+        )
+        .bind(session_id)
+        .fetch_one(pool)
+        .await
+        .map_err(AppError::internal)?;
+
+        if active_count >= MAX_ACTIVE_PARTICIPANTS_PER_SESSION {
+            return Err(AppError::Conflict("session_full".into()));
+        }
+    }
 
     let participant_id = Uuid::new_v4();
     let res = sqlx::query(
@@ -325,6 +374,11 @@ pub async fn track(
     if !is_member {
         return Err(AppError::Forbidden);
     }
+
+    // Clamp the client-supplied limit before it reaches SQL: a negative value
+    // would error, and an unbounded value would let one request pull the
+    // entire ping history for a session (security hardening 2026-07-09).
+    let limit = limit.clamp(1, MAX_TRACK_LIMIT);
 
     let pings: Vec<PingPoint> = sqlx::query_as(
         "SELECT user_id, seq, \
