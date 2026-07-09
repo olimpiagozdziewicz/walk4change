@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: olimpia-intuflow/walk4change-api
+  IMAGE_NAME: olimpiagozdziewicz/walk4change-api
 
 jobs:
   build-push-deploy:
@@ -54,7 +54,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       # Deploy przez webhook CD App Service (Continuous Deployment po stronie
-      # Azure; App Service śledzi ghcr.io/olimpia-intuflow/walk4change-api:latest
+      # Azure; App Service śledzi ghcr.io/olimpiagozdziewicz/walk4change-api:latest
       # i po webhooku pobiera świeży obraz + restartuje kontener).
       # Dlatego tag :latest w kroku build+push jest kluczowy (metadata-action
       # taguje latest na default branch + short-sha).
