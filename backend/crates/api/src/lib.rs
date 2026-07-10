@@ -40,6 +40,44 @@ pub fn router_health() -> Router {
     Router::new().route("/api/v1/health", get(|| async { "ok" }))
 }
 
+/// Extract the real client IP for rate limiting.
+///
+/// Behind Azure App Service the socket peer is the platform front-end, so all
+/// users would share one rate-limit bucket (audit 2026-07-10: ~5 chat users
+/// would exhaust the global bucket; worse, the auth bucket is 10/min). The
+/// front-end APPENDS the true client IP as the LAST entry of
+/// `X-Forwarded-For`, so taking the last valid entry is spoof-proof (anything
+/// client-supplied sits earlier in the list). Falls back to the socket peer
+/// when the header is absent/unparsable (e.g. direct connections in tests).
+fn client_ip(request: &Request<Body>) -> Option<std::net::IpAddr> {
+    let from_xff = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|value| {
+            let last = value.split(',').next_back()?.trim();
+            // Azure may append ":port"; IPv6 may come bracketed "[::1]:port".
+            let host = if let Some(stripped) = last.strip_prefix('[') {
+                stripped.split(']').next().unwrap_or(stripped)
+            } else if last.matches(':').count() == 1 {
+                // exactly one ':' => IPv4:port (bare IPv6 has ≥2 colons)
+                last.split(':').next().unwrap_or(last)
+            } else {
+                last
+            };
+            host.parse::<std::net::IpAddr>().ok()
+        });
+
+    from_xff.or_else(|| {
+        use axum::extract::ConnectInfo;
+        use std::net::SocketAddr;
+        request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0.ip())
+    })
+}
+
 /// Middleware: add security headers to every response.
 async fn security_headers(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
@@ -126,17 +164,11 @@ pub fn build_app(state: AppState) -> Router {
             let auth_lim = Arc::clone(&auth_lim);
             let glob_lim = Arc::clone(&glob_lim);
             async move {
-                use axum::extract::ConnectInfo;
-                use std::net::SocketAddr;
-
-                let ip = req
-                    .extensions()
-                    .get::<ConnectInfo<SocketAddr>>()
-                    .map(|ci| ci.0.ip())
-                    .unwrap_or_else(|| {
-                        // Fallback when ConnectInfo is absent (e.g. health checks in unit tests).
-                        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-                    });
+                let ip = client_ip(&req).unwrap_or_else(|| {
+                    // Fallback when both XFF and ConnectInfo are absent
+                    // (e.g. health checks in unit tests).
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+                });
 
                 let is_auth = req.uri().path().starts_with("/api/v1/auth/");
                 let limiter = if is_auth { &auth_lim } else { &glob_lim };
@@ -224,6 +256,10 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))
         .route("/api/v1/friends", get(routes::friends::list))
+        .route(
+            "/api/v1/friends/:user_id",
+            axum::routing::delete(routes::friends::remove_friend),
+        )
         .route("/api/v1/users/search", get(routes::users::search))
         .route(
             "/api/v1/conversations",
@@ -237,7 +273,10 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/walks/open", get(routes::walks::open_walks))
         .route("/api/v1/me/walks", get(routes::walks::my_walks))
         .route("/api/v1/walks/join-by-code", post(routes::walks::join_by_code))
-        .route("/api/v1/walks/:id", get(routes::walks::get_walk))
+        .route(
+            "/api/v1/walks/:id",
+            get(routes::walks::get_walk).patch(routes::walks::patch_walk),
+        )
         .route("/api/v1/walks/:id/join", post(routes::walks::join_walk))
         .route("/api/v1/walks/:id/leave", post(routes::walks::leave_walk))
         .route("/api/v1/walks/:id/stop", post(routes::walks::stop_walk))

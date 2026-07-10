@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use rand::Rng;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -101,17 +102,83 @@ pub async fn start(
     Ok(session)
 }
 
+/// Insert-or-rejoin a participant inside an open transaction, enforcing the
+/// active-participant cap. Locks the session row (`FOR UPDATE`) first, so
+/// parallel joins serialize and cannot overshoot the cap (audit B3.3).
+///
+/// Rejoin-after-leave clears `left_at` (audit N1 — previously a former
+/// participant could never return: INSERT hit the UNIQUE constraint).
+///
+/// Returns `Conflict("already_joined")` when the actor is already active,
+/// `Conflict("session_full")` at the cap, `NotFound` when the session is gone
+/// or no longer active.
+async fn join_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    session_id: Uuid,
+    actor: Uuid,
+) -> Result<(), AppError> {
+    let status: Option<(String,)> = sqlx::query_as(
+        "SELECT status FROM walk_sessions WHERE id = $1 FOR UPDATE",
+    )
+    .bind(session_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(AppError::internal)?;
+
+    match status {
+        None => return Err(AppError::NotFound),
+        Some((st,)) if st != "active" => return Err(AppError::NotFound),
+        _ => {}
+    }
+
+    // Cap liczony bez samego aktora (jego powrót nie zjada miejsca).
+    let active_others: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM walk_participants \
+         WHERE session_id = $1 AND left_at IS NULL AND user_id <> $2",
+    )
+    .bind(session_id)
+    .bind(actor)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(AppError::internal)?;
+
+    if active_others >= MAX_ACTIVE_PARTICIPANTS_PER_SESSION {
+        return Err(AppError::Conflict("session_full".into()));
+    }
+
+    // Nowy uczestnik → INSERT; powrót po leave → left_at=NULL;
+    // już aktywny → 0 wierszy (WHERE odfiltruje) → already_joined.
+    let rows = sqlx::query(
+        "INSERT INTO walk_participants (id, session_id, user_id) VALUES ($1, $2, $3) \
+         ON CONFLICT (session_id, user_id) \
+         DO UPDATE SET left_at = NULL \
+         WHERE walk_participants.left_at IS NOT NULL",
+    )
+    .bind(Uuid::new_v4())
+    .bind(session_id)
+    .bind(actor)
+    .execute(&mut **tx)
+    .await
+    .map_err(AppError::internal)?
+    .rows_affected();
+
+    if rows == 0 {
+        return Err(AppError::Conflict("already_joined".into()));
+    }
+    Ok(())
+}
+
 /// Join an active walk session as `actor`.
 ///
 /// Friendship with the host is required UNLESS the session is open
-/// ("spaceruję — dołącz" opt-in); open sessions instead enforce the same
-/// active-participant cap as [`join_by_code`].
+/// ("spaceruję — dołącz" opt-in) or the actor is a returning participant.
+/// Cap + rejoin handled transactionally in [`join_in_tx`].
 ///
 /// Errors:
 /// - Session not found or not `active` → 404.
-/// - closed session and `actor` is not friends with the host → 403.
-/// - open session already at the participant cap → 409 `session_full`.
-/// - `actor` already joined (UNIQUE violation) → 409.
+/// - closed session, stranger and not friends with the host → 403.
+/// - session at the participant cap → 409 `session_full`.
+/// - `actor` already an active participant → 409 `already_joined`.
 pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), AppError> {
     let row: Option<SessionRow> = sqlx::query_as(
         "SELECT host_id, status, is_open FROM walk_sessions WHERE id = $1",
@@ -126,43 +193,25 @@ pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
         return Err(AppError::NotFound);
     }
 
-    if is_open {
-        // Open walk: anyone may join, but cap active participants (same
-        // sockpuppet guard as join_by_code).
-        let active_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM walk_participants \
-             WHERE session_id = $1 AND left_at IS NULL",
+    if !is_open {
+        // Powracający uczestnik był już wpuszczony — gate tylko dla nowych.
+        let was_member: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
+            "SELECT left_at FROM walk_participants WHERE session_id = $1 AND user_id = $2",
         )
         .bind(session_id)
-        .fetch_one(pool)
+        .bind(actor)
+        .fetch_optional(pool)
         .await
         .map_err(AppError::internal)?;
 
-        if active_count >= MAX_ACTIVE_PARTICIPANTS_PER_SESSION {
-            return Err(AppError::Conflict("session_full".into()));
+        if was_member.is_none() && !friend::are_friends(pool, host_id, actor).await? {
+            return Err(AppError::Forbidden);
         }
-    } else if !friend::are_friends(pool, host_id, actor).await? {
-        return Err(AppError::Forbidden);
     }
 
-    let participant_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO walk_participants (id, session_id, user_id) VALUES ($1, $2, $3)",
-    )
-    .bind(participant_id)
-    .bind(session_id)
-    .bind(actor)
-    .execute(pool)
-    .await
-    .map_err(|e| {
-        if let sqlx::Error::Database(ref db) = e {
-            if db.is_unique_violation() {
-                return AppError::Conflict("already_joined".into());
-            }
-        }
-        AppError::internal(e)
-    })?;
-
+    let mut tx = pool.begin().await.map_err(AppError::internal)?;
+    join_in_tx(&mut tx, session_id, actor).await?;
+    tx.commit().await.map_err(AppError::internal)?;
     Ok(())
 }
 
@@ -191,59 +240,16 @@ pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid
 
     let (session_id,) = row.ok_or(AppError::NotFound)?;
 
-    // Idempotent fast path: an actor who is already an active participant may
-    // "rejoin" via the same code without being counted against the cap below
-    // (the INSERT further down will just hit the UNIQUE violation and return
-    // the session id as before).
-    let already_active: bool = sqlx::query_scalar(
-        "SELECT EXISTS( \
-            SELECT 1 FROM walk_participants \
-            WHERE session_id = $1 AND user_id = $2 AND left_at IS NULL \
-        )",
-    )
-    .bind(session_id)
-    .bind(actor)
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::internal)?;
-
-    if !already_active {
-        // Cap active participants per session (security audit 2026-07-09):
-        // prevents one actor from farming a leaked join code with dozens of
-        // sockpuppet accounts. Generous limit — real demo groups are tiny.
-        let active_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM walk_participants \
-             WHERE session_id = $1 AND left_at IS NULL",
-        )
-        .bind(session_id)
-        .fetch_one(pool)
-        .await
-        .map_err(AppError::internal)?;
-
-        if active_count >= MAX_ACTIVE_PARTICIPANTS_PER_SESSION {
-            return Err(AppError::Conflict("session_full".into()));
-        }
+    // Wspólna transakcyjna ścieżka: cap bez wyścigu + rejoin po leave
+    // (audyt B3.3 + N1). Join-by-code jest idempotentny: "already_joined"
+    // zamieniamy na sukces ze zwrotem id sesji.
+    let mut tx = pool.begin().await.map_err(AppError::internal)?;
+    match join_in_tx(&mut tx, session_id, actor).await {
+        Ok(()) => {}
+        Err(AppError::Conflict(ref code)) if code == "already_joined" => {}
+        Err(e) => return Err(e),
     }
-
-    let participant_id = Uuid::new_v4();
-    let res = sqlx::query(
-        "INSERT INTO walk_participants (id, session_id, user_id) VALUES ($1, $2, $3)",
-    )
-    .bind(participant_id)
-    .bind(session_id)
-    .bind(actor)
-    .execute(pool)
-    .await;
-
-    if let Err(e) = res {
-        // Already a participant → idempotent: still return the session id.
-        if let sqlx::Error::Database(ref db) = e {
-            if db.is_unique_violation() {
-                return Ok(session_id);
-            }
-        }
-        return Err(AppError::internal(e));
-    }
+    tx.commit().await.map_err(AppError::internal)?;
 
     Ok(session_id)
 }
@@ -374,7 +380,13 @@ pub async fn get(
     .await
     .map_err(AppError::internal)?;
 
-    let session = session.ok_or(AppError::NotFound)?;
+    let mut session = session.ok_or(AppError::NotFound)?;
+
+    // join_code = klucz dystrybucji sesji; dostaje go tylko host (audyt B3.2 —
+    // obcy z otwartego spaceru nie może rozsyłać kodu dalej).
+    if session.host_id != actor {
+        session.join_code = None;
+    }
 
     let participants: Vec<ParticipantInfo> = sqlx::query_as(
         "SELECT id, session_id, user_id, joined_at, left_at, total_meters, total_points \
@@ -436,6 +448,50 @@ pub async fn track(
     .map_err(AppError::internal)?;
 
     Ok(pings)
+}
+
+/// Toggle the "spaceruję — dołącz" visibility of an active session (host only).
+///
+/// `open_note = None` keeps the existing note. Returns 403 when the actor is
+/// not the host or the session is no longer active (audit B3.4 — previously
+/// the only way to go invisible was stopping the walk).
+pub async fn set_open(
+    pool: &PgPool,
+    session_id: Uuid,
+    host: Uuid,
+    is_open: bool,
+    open_note: Option<&str>,
+) -> Result<(), AppError> {
+    let open_note = open_note.map(str::trim).filter(|s| !s.is_empty());
+    if let Some(note) = open_note {
+        if note.chars().count() > 200 {
+            return Err(AppError::Validation(vec![FieldError {
+                field: "open_note".into(),
+                message: "note must be at most 200 characters".into(),
+                code: "INVALID_LENGTH".into(),
+            }]));
+        }
+    }
+
+    let rows = sqlx::query(
+        "UPDATE walk_sessions \
+         SET is_open = $3, \
+             open_note = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE open_note END \
+         WHERE id = $1 AND host_id = $2 AND status = 'active'",
+    )
+    .bind(session_id)
+    .bind(host)
+    .bind(is_open)
+    .bind(open_note)
+    .execute(pool)
+    .await
+    .map_err(AppError::internal)?
+    .rows_affected();
+
+    if rows == 0 {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
 }
 
 /// List currently-active open walks ("spaceruję — dołącz"), newest first.

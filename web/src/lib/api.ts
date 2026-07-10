@@ -616,6 +616,11 @@ async function respondFriendRequest(requestId: string, accept: boolean): Promise
   await apiRequest('/friends/respond', { method: 'POST', body: { request_id: requestId, accept } })
 }
 
+/** Usuń znajomość (albo wycofaj zaproszenie) — tnie też kanał czatu. */
+async function removeFriend(userId: string): Promise<void> {
+  await apiRequest(`/friends/${userId}`, { method: 'DELETE' })
+}
+
 export interface UserSearchResult {
   id: string
   name: string
@@ -846,6 +851,7 @@ export const api = {
   getFriends: fetchFriends,
   sendFriendRequest,
   respondFriendRequest,
+  removeFriend,
   searchUsers,
   getConversations: fetchConversations,
   getMessages: fetchMessages,

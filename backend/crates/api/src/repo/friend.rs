@@ -144,6 +144,30 @@ pub async fn respond(
     Ok(())
 }
 
+/// Remove ANY friendship row between `actor` and `other` (either direction,
+/// any status): unfriend an accepted friend, cancel an outgoing request or
+/// drop an incoming one. Severs the 1:1 chat channel (friends-only).
+///
+/// Returns 404 when no row exists.
+pub async fn remove(pool: &PgPool, actor: Uuid, other: Uuid) -> Result<(), AppError> {
+    let rows = sqlx::query(
+        "DELETE FROM friendships \
+         WHERE (requester_id = $1 AND addressee_id = $2) \
+            OR (requester_id = $2 AND addressee_id = $1)",
+    )
+    .bind(actor)
+    .bind(other)
+    .execute(pool)
+    .await
+    .map_err(AppError::internal)?
+    .rows_affected();
+
+    if rows == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
 /// Return `true` if users `a` and `b` have an `accepted` friendship in either direction.
 pub async fn are_friends(pool: &PgPool, a: Uuid, b: Uuid) -> Result<bool, AppError> {
     let exists: bool = sqlx::query_scalar(

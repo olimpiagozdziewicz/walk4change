@@ -13,6 +13,17 @@ prywatnym sejfie właścicielki. Nigdy w repo ani w czacie.
 
 ---
 
+## 0. Stan bezpieczeństwa / multi-user (2026-07-10)
+
+Pełny audyt żyje w workspace (repo `agenci`): `seasteps/spec/2026-07-10-audyt-multiuser-i-prebuild-social.md`, sekcja STATUS NAPRAW.
+
+- **🔴 RLS na warstwie społecznej — NAPRAWIONE na prodzie.** Migracje `0005_social`/`0006_feed_social` utworzyły `messages`/`eco_likes`/`eco_comments` BEZ RLS → publiczny klucz anon czytał je przez PostgREST (potwierdzone live 10.07: anon-GET = 200, prywatne wiadomości 1:1 wyciekały). Włączono RLS + REVOKE anon/authenticated (Supabase Management API); po fixie anon = 401. Fix zastosowany **out-of-band**; trwały in-band = migracja `0007_rls_social.sql` na gałęzi `security-rls-2026-07-10` (NIE zmergowana). Backend łączy się jako `postgres` → omija RLS. **Zasada: każda nowa tabela MUSI mieć `ENABLE ROW LEVEL SECURITY` w migracji.**
+- **🔴 Do zrobienia PRZED wpuszczeniem realnych obcych userów (kod Rust, kontrolowany merge, nie blind):** rate-limiter musi czytać `X-Forwarded-For` (bierze IP z socketa → za proxy Azure ~5 userów czatu = 429 dla wszystkich); brak unfriend/block (raz przyjęty „znajomy" = dożywotni kanał nękania); bug rejoin-po-leave (`left_at` nie czyszczony). Lista 🟠/🟡 w audycie.
+- **Sufit 1 instancji B1: ~100–300 równoczesnych spacerowiczów** (pęka pula DB=10; sesje grupowe ~N² → ~10–15 pełnych grup). Sufit architektoniczny: hub WS w pamięci = nie skalować w poziomie bez Redis pub/sub / sticky sessions.
+- **Build lokalny:** Rust JEST na maszynie „jazda" (rustc/cargo 1.97 + clippy; przez `. ~/.cargo/env`; repo = kopia Syncthing `/home/olimpia/asystenci/BIZNES/projekty/seasteps/app/backend`, nie ruszać tam gita) → `cargo check`/clippy PRZED merge, koniec ślepych pushów.
+
+---
+
 ## 1. Przegląd architektury
 
 ```
