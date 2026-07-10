@@ -216,6 +216,11 @@ pub fn build_app(state: AppState) -> Router {
             "/api/v1/me/eco-reports",
             get(routes::eco::list_my_reports),
         )
+        .route("/api/v1/eco/reports/:id/like", post(routes::eco::toggle_like))
+        .route(
+            "/api/v1/eco/reports/:id/comments",
+            get(routes::eco::list_comments).post(routes::eco::create_comment),
+        )
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))
         .route("/api/v1/friends", get(routes::friends::list))

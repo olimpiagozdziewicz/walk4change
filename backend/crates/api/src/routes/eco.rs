@@ -1,4 +1,9 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -164,7 +169,7 @@ pub async fn create_report(
     )))
 }
 
-/// One feed row: report columns + the author's display name.
+/// One feed row: report columns + author + like/comment counters.
 type FeedRow = (
     uuid::Uuid,
     String,
@@ -177,22 +182,29 @@ type FeedRow = (
     Option<String>,
     chrono::DateTime<chrono::Utc>,
     String,
+    i64,
+    i64,
+    bool,
 );
 
-/// `GET /api/v1/eco/reports` — recent reports across all users (community feed),
-/// each annotated with the author's `display_name`.
+/// `GET /api/v1/eco/reports` — recent reports across all users (community feed):
+/// author `display_name`, `like_count`, `comment_count` and `liked_by_me`.
 pub async fn list_reports(
-    _auth: AuthUser,
+    auth: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<Value>, AppError> {
     let rows: Vec<FeedRow> = sqlx::query_as(
         "SELECT e.id, e.kind, e.category, e.description, e.location, e.status, \
                 e.photo_url, e.photo_before_url, e.photo_after_url, e.created_at, \
-                u.display_name \
+                u.display_name, \
+                (SELECT count(*) FROM eco_likes l WHERE l.report_id = e.id) AS like_count, \
+                (SELECT count(*) FROM eco_comments c WHERE c.report_id = e.id) AS comment_count, \
+                EXISTS(SELECT 1 FROM eco_likes l2 WHERE l2.report_id = e.id AND l2.user_id = $1) AS liked_by_me \
          FROM eco_reports e \
          JOIN users u ON u.id = e.user_id \
          ORDER BY e.created_at DESC LIMIT 50",
     )
+    .bind(auth.id)
     .fetch_all(&state.pool)
     .await
     .map_err(AppError::internal)?;
@@ -202,10 +214,152 @@ pub async fn list_reports(
         .map(|r| {
             let mut v = row_json(r.0, r.1, r.2, r.3, r.4, r.5, r.6, r.7, r.8, r.9);
             v["author"] = Value::String(r.10);
+            v["like_count"] = Value::from(r.11);
+            v["comment_count"] = Value::from(r.12);
+            v["liked_by_me"] = Value::from(r.13);
             v
         })
         .collect();
     Ok(response::data(items))
+}
+
+/// `POST /api/v1/eco/reports/:id/like` — toggle a like on a feed entry.
+///
+/// Returns `{ liked, like_count }` after the toggle. 404 for unknown report.
+pub async fn toggle_like(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(report_id): Path<uuid::Uuid>,
+) -> Result<Json<Value>, AppError> {
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM eco_reports WHERE id = $1)")
+        .bind(report_id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(AppError::internal)?;
+    if !exists {
+        return Err(AppError::NotFound);
+    }
+
+    let deleted = sqlx::query("DELETE FROM eco_likes WHERE report_id = $1 AND user_id = $2")
+        .bind(report_id)
+        .bind(auth.id)
+        .execute(&state.pool)
+        .await
+        .map_err(AppError::internal)?
+        .rows_affected();
+
+    let liked = if deleted == 0 {
+        sqlx::query(
+            "INSERT INTO eco_likes (report_id, user_id) VALUES ($1, $2) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(report_id)
+        .bind(auth.id)
+        .execute(&state.pool)
+        .await
+        .map_err(AppError::internal)?;
+        true
+    } else {
+        false
+    };
+
+    let like_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM eco_likes WHERE report_id = $1")
+            .bind(report_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(AppError::internal)?;
+
+    Ok(response::data(
+        serde_json::json!({ "liked": liked, "like_count": like_count }),
+    ))
+}
+
+/// One comment row with its author's display name.
+type CommentRow = (uuid::Uuid, uuid::Uuid, String, chrono::DateTime<chrono::Utc>, String);
+
+fn comment_json(r: CommentRow) -> Value {
+    serde_json::json!({
+        "id": r.0,
+        "user_id": r.1,
+        "body": r.2,
+        "created_at": r.3,
+        "author": r.4,
+    })
+}
+
+/// `GET /api/v1/eco/reports/:id/comments` — comments for a feed entry, oldest first.
+pub async fn list_comments(
+    _auth: AuthUser,
+    State(state): State<AppState>,
+    Path(report_id): Path<uuid::Uuid>,
+) -> Result<Json<Value>, AppError> {
+    let rows: Vec<CommentRow> = sqlx::query_as(
+        "SELECT c.id, c.user_id, c.body, c.created_at, u.display_name \
+         FROM eco_comments c \
+         JOIN users u ON u.id = c.user_id \
+         WHERE c.report_id = $1 \
+         ORDER BY c.created_at \
+         LIMIT 100",
+    )
+    .bind(report_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(AppError::internal)?;
+
+    Ok(response::data(rows.into_iter().map(comment_json).collect::<Vec<_>>()))
+}
+
+/// Body for `POST /api/v1/eco/reports/:id/comments`.
+#[derive(Deserialize)]
+pub struct CreateCommentRequest {
+    pub body: String,
+}
+
+/// `POST /api/v1/eco/reports/:id/comments` — add a comment (1..=500 chars).
+pub async fn create_comment(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(report_id): Path<uuid::Uuid>,
+    Json(body): Json<CreateCommentRequest>,
+) -> Result<Response, AppError> {
+    let text = body.body.trim();
+    if text.is_empty() || text.chars().count() > 500 {
+        return Err(AppError::Validation(vec![FieldError {
+            field: "body".into(),
+            message: "comment must be 1..=500 characters".into(),
+            code: "INVALID_LENGTH".into(),
+        }]));
+    }
+
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM eco_reports WHERE id = $1)")
+        .bind(report_id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(AppError::internal)?;
+    if !exists {
+        return Err(AppError::NotFound);
+    }
+
+    let id = uuid::Uuid::new_v4();
+    let row: CommentRow = sqlx::query_as(
+        "WITH ins AS ( \
+             INSERT INTO eco_comments (id, report_id, user_id, body) \
+             VALUES ($1, $2, $3, $4) \
+             RETURNING id, user_id, body, created_at \
+         ) \
+         SELECT ins.id, ins.user_id, ins.body, ins.created_at, u.display_name \
+         FROM ins JOIN users u ON u.id = ins.user_id",
+    )
+    .bind(id)
+    .bind(report_id)
+    .bind(auth.id)
+    .bind(text)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(AppError::internal)?;
+
+    Ok((StatusCode::CREATED, response::data(comment_json(row))).into_response())
 }
 
 /// `GET /api/v1/me/eco-reports` — the authenticated user's own reports.
