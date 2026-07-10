@@ -79,6 +79,17 @@ export interface EcoReport {
   createdAt?: string
   /** Imię autora — tylko w feedzie społeczności (GET /eco/reports). */
   author?: string
+  likeCount?: number
+  commentCount?: number
+  likedByMe?: boolean
+}
+
+export interface EcoComment {
+  id: string
+  userId: string
+  body: string
+  createdAt: string
+  author: string
 }
 
 export interface CreateEcoInput {
@@ -415,6 +426,9 @@ interface BackendEcoReport {
   photo_after_url: string | null
   created_at: string
   author?: string
+  like_count?: number
+  comment_count?: number
+  liked_by_me?: boolean
 }
 
 function mapEcoReport(r: BackendEcoReport): EcoReport {
@@ -430,7 +444,44 @@ function mapEcoReport(r: BackendEcoReport): EcoReport {
     photoAfterUrl: r.photo_after_url,
     createdAt: r.created_at,
     author: r.author,
+    likeCount: r.like_count ?? 0,
+    commentCount: r.comment_count ?? 0,
+    likedByMe: r.liked_by_me ?? false,
   }
+}
+
+// ── Lajki + komentarze feedu eko ──────────────────────────
+async function toggleEcoLike(reportId: string): Promise<{ liked: boolean; likeCount: number }> {
+  const res = await apiRequest<{ liked: boolean; like_count: number }>(
+    `/eco/reports/${reportId}/like`,
+    { method: 'POST', body: {} },
+  )
+  return { liked: res.data?.liked ?? false, likeCount: res.data?.like_count ?? 0 }
+}
+
+interface BackendEcoComment {
+  id: string
+  user_id: string
+  body: string
+  created_at: string
+  author: string
+}
+
+function mapEcoComment(c: BackendEcoComment): EcoComment {
+  return { id: c.id, userId: c.user_id, body: c.body, createdAt: c.created_at, author: c.author }
+}
+
+async function fetchEcoComments(reportId: string): Promise<EcoComment[]> {
+  const res = await apiRequest<BackendEcoComment[]>(`/eco/reports/${reportId}/comments`)
+  return (res.data ?? []).map(mapEcoComment)
+}
+
+async function addEcoComment(reportId: string, body: string): Promise<EcoComment | null> {
+  const res = await apiRequest<BackendEcoComment>(`/eco/reports/${reportId}/comments`, {
+    method: 'POST',
+    body: { body },
+  })
+  return res.data ? mapEcoComment(res.data) : null
 }
 
 /** Upload a photo to Supabase Storage (`eco-photos`); returns its public URL. */
@@ -801,6 +852,9 @@ export const api = {
   sendMessage: sendChatMessage,
   getOpenWalks: fetchOpenWalks,
   joinOpenWalk,
+  toggleEcoLike,
+  getEcoComments: fetchEcoComments,
+  addEcoComment,
   getMyWalks: fetchMyWalks,
   getWalkTrack: fetchWalkTrack,
   redeemReward,

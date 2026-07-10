@@ -12,6 +12,7 @@ import {
   Heart,
   UserPlus,
   MagnifyingGlass,
+  PaperPlaneRight,
 } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
 import { Avatar } from '../components/Avatar'
@@ -29,6 +30,7 @@ import {
   type FriendsData,
   type UserSearchResult,
   type EcoReport,
+  type EcoComment,
 } from '../lib/api'
 
 function minutesAgo(iso: string): number {
@@ -66,6 +68,70 @@ export function Community() {
 
   // ── Feed eko ──
   const [feed, setFeed] = useState<EcoReport[]>([])
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+  const [comments, setComments] = useState<Record<string, EcoComment[]>>({})
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
+  const [commentSending, setCommentSending] = useState<string | null>(null)
+
+  const toggleLike = async (reportId: string) => {
+    // optymistycznie — cofamy przy błędzie
+    setFeed((cur) =>
+      cur.map((r) =>
+        r.id === reportId
+          ? { ...r, likedByMe: !r.likedByMe, likeCount: (r.likeCount ?? 0) + (r.likedByMe ? -1 : 1) }
+          : r,
+      ),
+    )
+    try {
+      const { liked, likeCount } = await api.toggleEcoLike(reportId)
+      setFeed((cur) => cur.map((r) => (r.id === reportId ? { ...r, likedByMe: liked, likeCount } : r)))
+    } catch {
+      setFeed((cur) =>
+        cur.map((r) =>
+          r.id === reportId
+            ? { ...r, likedByMe: !r.likedByMe, likeCount: (r.likeCount ?? 0) + (r.likedByMe ? -1 : 1) }
+            : r,
+        ),
+      )
+    }
+  }
+
+  const toggleCommentsPanel = (reportId: string) => {
+    setOpenComments((cur) => {
+      const next = new Set(cur)
+      if (next.has(reportId)) {
+        next.delete(reportId)
+      } else {
+        next.add(reportId)
+        if (!comments[reportId]) {
+          api.getEcoComments(reportId)
+            .then((list) => setComments((c) => ({ ...c, [reportId]: list })))
+            .catch(() => {})
+        }
+      }
+      return next
+    })
+  }
+
+  const sendComment = async (reportId: string) => {
+    const body = (commentDraft[reportId] ?? '').trim()
+    if (!body || commentSending) return
+    setCommentSending(reportId)
+    try {
+      const added = await api.addEcoComment(reportId, body)
+      if (added) {
+        setComments((c) => ({ ...c, [reportId]: [...(c[reportId] ?? []), added] }))
+        setCommentDraft((d) => ({ ...d, [reportId]: '' }))
+        setFeed((cur) =>
+          cur.map((r) => (r.id === reportId ? { ...r, commentCount: (r.commentCount ?? 0) + 1 } : r)),
+        )
+      }
+    } catch {
+      /* zostaje draft — user spróbuje znowu */
+    } finally {
+      setCommentSending(null)
+    }
+  }
 
   // ── Znajomi ──
   const [friends, setFriends] = useState<FriendsData>(EMPTY_FRIENDS)
@@ -252,39 +318,121 @@ export function Community() {
                 <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-ink">
                   <Heart size={18} className="text-leaf" /> Ostatnio w społeczności
                 </h2>
-                <div className="space-y-2.5">
-                  {feed.slice(0, 10).map((r, i) => {
-                    const thumb = r.photoAfterUrl || r.photoUrl || r.photoBeforeUrl
+                <div className="space-y-3">
+                  {feed.slice(0, 15).map((r, i) => {
                     const isCleanup = r.kind === 'cleanup' || r.status === 'cleaned'
+                    const beforeAfter = r.photoBeforeUrl && r.photoAfterUrl
+                    const singlePhoto = !beforeAfter ? r.photoAfterUrl || r.photoUrl || r.photoBeforeUrl : null
+                    const panelOpen = openComments.has(r.id)
+                    const list = comments[r.id] ?? []
                     return (
                       <motion.div
                         key={r.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.04 }}
+                        transition={{ delay: Math.min(i, 5) * 0.05 }}
                       >
-                        <Card className="flex items-center gap-3 p-3.5">
-                          {thumb ? (
-                            <img src={thumb} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
-                          ) : (
-                            <Avatar name={r.author ?? '?'} size={44} />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-bold text-ink [overflow-wrap:anywhere]">
-                              {r.author ?? 'Ktoś'}{' '}
-                              <span className="font-semibold text-muted">
+                        <Card className="overflow-hidden">
+                          {/* nagłówek wpisu */}
+                          <div className="flex items-center gap-3 p-4 pb-3">
+                            <Avatar name={r.author ?? '?'} size={40} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[15px] font-bold leading-tight text-ink [overflow-wrap:anywhere]">
+                                {r.author ?? 'Ktoś'}
+                              </div>
+                              <div className="text-xs font-semibold text-muted">
                                 {isCleanup ? 'posprzątał(a)' : 'zgłosił(a) problem'}
                                 {r.type ? ` • ${r.type}` : ''}
-                              </span>
+                                {r.createdAt ? ` • ${timeAgo(r.createdAt)}` : ''}
+                              </div>
                             </div>
-                            {r.description && (
-                              <p className="truncate text-xs text-muted">{r.description}</p>
-                            )}
-                            {r.createdAt && (
-                              <p className="mt-0.5 text-[11px] font-bold text-muted/80">{timeAgo(r.createdAt)}</p>
-                            )}
+                            <Pill tone={isCleanup ? 'leaf' : 'sand'}>{isCleanup ? '+25 pkt' : 'zgłoszone'}</Pill>
                           </div>
-                          <Pill tone={isCleanup ? 'leaf' : 'sand'}>{isCleanup ? '+25 pkt' : 'zgłoszone'}</Pill>
+
+                          {/* treść */}
+                          {r.description && (
+                            <p className="px-4 pb-3 text-sm leading-snug text-ink [overflow-wrap:anywhere]">
+                              {r.description}
+                            </p>
+                          )}
+
+                          {/* zdjęcia — duże, widoczne dla wszystkich */}
+                          {beforeAfter ? (
+                            <div className="grid grid-cols-2 gap-0.5">
+                              <div className="relative">
+                                <img src={r.photoBeforeUrl!} alt="Przed sprzątaniem" className="h-44 w-full object-cover" loading="lazy" />
+                                <span className="absolute left-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white">PRZED</span>
+                              </div>
+                              <div className="relative">
+                                <img src={r.photoAfterUrl!} alt="Po sprzątaniu" className="h-44 w-full object-cover" loading="lazy" />
+                                <span className="absolute left-2 top-2 rounded-full bg-leaf/90 px-2 py-0.5 text-[10px] font-bold text-white">PO</span>
+                              </div>
+                            </div>
+                          ) : singlePhoto ? (
+                            <img src={singlePhoto} alt="" className="max-h-80 w-full object-cover" loading="lazy" />
+                          ) : null}
+
+                          {/* akcje: polub + komentuj */}
+                          <div className="flex items-center gap-4 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => toggleLike(r.id)}
+                              className={`inline-flex items-center gap-1.5 text-sm font-bold transition active:scale-90 ${
+                                r.likedByMe ? 'text-rose-500' : 'text-muted'
+                              }`}
+                            >
+                              <Heart size={20} weight={r.likedByMe ? 'fill' : 'regular'} />
+                              {(r.likeCount ?? 0) > 0 && r.likeCount}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleCommentsPanel(r.id)}
+                              className={`inline-flex items-center gap-1.5 text-sm font-bold transition active:scale-90 ${
+                                panelOpen ? 'text-sea' : 'text-muted'
+                              }`}
+                            >
+                              <ChatCircle size={20} />
+                              {(r.commentCount ?? 0) > 0 ? r.commentCount : 'Komentuj'}
+                            </button>
+                          </div>
+
+                          {/* komentarze */}
+                          {panelOpen && (
+                            <div className="border-t border-[rgba(20,52,58,0.06)] px-4 py-3">
+                              {list.length > 0 && (
+                                <div className="mb-3 space-y-2">
+                                  {list.map((c) => (
+                                    <div key={c.id} className="flex items-start gap-2">
+                                      <Avatar name={c.author} size={26} />
+                                      <p className="min-w-0 flex-1 text-sm leading-snug text-ink [overflow-wrap:anywhere]">
+                                        <span className="font-bold">{c.author}</span>{' '}
+                                        <span>{c.body}</span>{' '}
+                                        <span className="text-[11px] font-semibold text-muted">{timeAgo(c.createdAt)}</span>
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={commentDraft[r.id] ?? ''}
+                                  onChange={(e) => setCommentDraft((d) => ({ ...d, [r.id]: e.target.value.slice(0, 500) }))}
+                                  onKeyDown={(e) => e.key === 'Enter' && sendComment(r.id)}
+                                  placeholder="Dodaj komentarz…"
+                                  className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/70 px-3.5 py-2 text-sm text-ink outline-none placeholder:text-muted/70 focus:ring-2 focus:ring-sea/30"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => sendComment(r.id)}
+                                  disabled={commentSending === r.id || !(commentDraft[r.id] ?? '').trim()}
+                                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sea to-deep text-white transition active:scale-90 disabled:opacity-50"
+                                  aria-label="Wyślij komentarz"
+                                >
+                                  <PaperPlaneRight size={16} weight="fill" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </Card>
                       </motion.div>
                     )
