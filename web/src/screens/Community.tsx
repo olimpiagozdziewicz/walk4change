@@ -13,6 +13,7 @@ import {
   UserPlus,
   MagnifyingGlass,
   PaperPlaneRight,
+  X,
 } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
 import { Avatar } from '../components/Avatar'
@@ -140,6 +141,26 @@ export function Community() {
   // ── Znajomi ──
   const [friends, setFriends] = useState<FriendsData>(EMPTY_FRIENDS)
   const [respondingId, setRespondingId] = useState<string | null>(null)
+  // usuwanie znajomego: pierwszy klik uzbraja ("Na pewno?"), drugi usuwa
+  const [unfriendArmedId, setUnfriendArmedId] = useState<string | null>(null)
+  const [unfriendingId, setUnfriendingId] = useState<string | null>(null)
+
+  const unfriend = async (id: string) => {
+    if (unfriendArmedId !== id) {
+      setUnfriendArmedId(id)
+      return
+    }
+    setUnfriendingId(id)
+    try {
+      await api.removeFriend(id)
+      loadFriends()
+    } catch {
+      /* lista się nie zmieni — user spróbuje ponownie */
+    } finally {
+      setUnfriendingId(null)
+      setUnfriendArmedId(null)
+    }
+  }
 
   // ── Znajdź ludzi ──
   const [query, setQuery] = useState('')
@@ -590,6 +611,17 @@ export function Community() {
                           >
                             <ChatCircle size={16} /> Napisz
                           </SoftButton>
+                          <button
+                            type="button"
+                            onClick={() => unfriend(f.id)}
+                            disabled={unfriendingId === f.id}
+                            aria-label={`Usuń ${f.name} ze znajomych`}
+                            className={`shrink-0 rounded-full px-2.5 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-50 ${
+                              unfriendArmedId === f.id ? 'bg-rose-500/15 text-rose-600' : 'text-muted'
+                            }`}
+                          >
+                            {unfriendArmedId === f.id ? 'Na pewno?' : <X size={15} />}
+                          </button>
                         </div>
                       </Card>
                     )

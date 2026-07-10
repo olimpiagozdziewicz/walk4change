@@ -1,4 +1,8 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -52,6 +56,21 @@ pub async fn respond(
 ) -> Result<Json<Value>, AppError> {
     friend_repo::respond(&state.pool, body.request_id, auth.id, body.accept).await?;
     Ok(response::data(serde_json::json!({})))
+}
+
+/// `DELETE /api/v1/friends/:user_id`
+///
+/// Remove the friendship with `user_id` (unfriend / cancel pending, either
+/// direction). Also cuts the 1:1 chat (friends-only on both read and write).
+/// - 204 on success.
+/// - 404 when there is no friendship row between the two users.
+pub async fn remove_friend(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    friend_repo::remove(&state.pool, auth.id, user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `GET /api/v1/friends`

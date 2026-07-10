@@ -69,6 +69,35 @@ pub async fn start_walk(
         .into_response())
 }
 
+/// Body for `PATCH /api/v1/walks/:id` ("spaceruję — dołącz" toggle mid-walk).
+#[derive(Deserialize)]
+pub struct PatchWalkBody {
+    pub is_open: bool,
+    #[serde(default)]
+    pub open_note: Option<String>,
+}
+
+/// `PATCH /api/v1/walks/:id`
+///
+/// Host-only: toggle the session's open visibility without stopping the walk.
+/// Returns 204; 403 when not the host or the session is not active.
+pub async fn patch_walk(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+    Json(body): Json<PatchWalkBody>,
+) -> Result<StatusCode, AppError> {
+    walk_repo::set_open(
+        &state.pool,
+        session_id,
+        auth.id,
+        body.is_open,
+        body.open_note.as_deref(),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `GET /api/v1/walks/open`
 ///
 /// List currently-active open walks ("spaceruję — dołącz"), newest first.

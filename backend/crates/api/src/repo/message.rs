@@ -62,8 +62,11 @@ pub async fn send(
 
 /// Fetch the conversation between `me` and `other`, oldest first.
 ///
-/// When `after` is given, only messages strictly newer are returned (polling).
-/// Side effect: marks messages from `other` to `me` as read.
+/// Friends-only, also on read (audit 2026-07-10 B1.2/B1.3): after an unfriend
+/// the history stops being readable, so severing the relation really cuts the
+/// channel. When `after` is given, only messages strictly newer are returned
+/// (polling). Side effect: marks the RETURNED incoming messages as read
+/// (only what the client actually received — audit B1.5).
 pub async fn conversation(
     pool: &PgPool,
     me: Uuid,
@@ -71,13 +74,19 @@ pub async fn conversation(
     after: Option<DateTime<Utc>>,
     limit: i64,
 ) -> Result<Vec<Message>, AppError> {
+    if !friend::are_friends(pool, me, other).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let limit = limit.clamp(1, MAX_MESSAGES_LIMIT);
 
+    // WHERE po LEAST/GREATEST pary — dokładnie pod indeks messages_pair_idx
+    // (forma z OR-em nie mapowała się na indeks wyrażeniowy → seq scan).
     let messages: Vec<Message> = sqlx::query_as(
         "SELECT id, sender_id, recipient_id, body, created_at, read_at \
          FROM messages \
-         WHERE ((sender_id = $1 AND recipient_id = $2) \
-             OR (sender_id = $2 AND recipient_id = $1)) \
+         WHERE LEAST(sender_id, recipient_id) = LEAST($1, $2) \
+           AND GREATEST(sender_id, recipient_id) = GREATEST($1, $2) \
            AND ($3::timestamptz IS NULL OR created_at > $3) \
          ORDER BY created_at DESC \
          LIMIT $4",
@@ -90,16 +99,24 @@ pub async fn conversation(
     .await
     .map_err(AppError::internal)?;
 
-    // Reading the thread marks the incoming side as read (best-effort).
-    sqlx::query(
-        "UPDATE messages SET read_at = now() \
-         WHERE sender_id = $1 AND recipient_id = $2 AND read_at IS NULL",
-    )
-    .bind(other)
-    .bind(me)
-    .execute(pool)
-    .await
-    .map_err(AppError::internal)?;
+    // Mark-read wyłącznie dla zwróconych wiadomości przychodzących —
+    // bez zapisu, gdy nie ma nic nowego (koniec write'a co 5 s per okno czatu).
+    let unread_ids: Vec<Uuid> = messages
+        .iter()
+        .filter(|m| m.recipient_id == me && m.read_at.is_none())
+        .map(|m| m.id)
+        .collect();
+    if !unread_ids.is_empty() {
+        sqlx::query(
+            "UPDATE messages SET read_at = now() \
+             WHERE id = ANY($1) AND recipient_id = $2 AND read_at IS NULL",
+        )
+        .bind(&unread_ids)
+        .bind(me)
+        .execute(pool)
+        .await
+        .map_err(AppError::internal)?;
+    }
 
     // Query returns newest-first (so LIMIT keeps the tail); flip to oldest-first for the UI.
     let mut messages = messages;

@@ -73,8 +73,13 @@ export function Chat() {
         nearBottomRef.current = true
         setMessages(msgs)
       })
-      .catch(() => {
-        if (!cancelled) setLoadError('Nie udało się wczytać rozmowy.')
+      .catch((err) => {
+        if (cancelled) return
+        setLoadError(
+          err instanceof ApiError && err.status === 403
+            ? 'Możecie pisać tylko ze znajomymi.'
+            : 'Nie udało się wczytać rozmowy.',
+        )
       })
     return () => {
       cancelled = true
