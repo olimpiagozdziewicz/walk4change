@@ -198,7 +198,10 @@ export function Eco() {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-ink">{r.type}</div>
+                    <div className="text-sm font-bold text-ink">
+                      {r.type}
+                      {r.author && <span className="font-semibold text-muted"> • {r.author}</span>}
+                    </div>
                     <div className="truncate text-xs text-muted">{r.description || r.location}</div>
                   </div>
                   <Pill tone={statusMeta[r.status].tone}>{statusMeta[r.status].label}</Pill>

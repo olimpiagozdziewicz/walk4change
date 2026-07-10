@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check } from '@phosphor-icons/react'
+import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut } from '@phosphor-icons/react'
 import { Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { FootstepTrail } from '../components/Footsteps'
 import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward } from '../lib/api'
 import { getInterests, saveInterests } from '../lib/interests'
 import { getGender, saveGender, type Gender } from '../lib/settings'
+import { logout } from '../lib/auth'
 
 export function Profile() {
   const nav = useNavigate()
@@ -303,7 +304,17 @@ export function Profile() {
           </>
         )}
 
-        <p className="mt-8 text-center text-xs text-muted">
+        <button
+          onClick={async () => {
+            await logout()
+            nav('/login')
+          }}
+          className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/70 bg-white/60 py-3 text-sm font-bold text-muted transition active:scale-[0.98]"
+        >
+          <SignOut size={16} /> Wyloguj się
+        </button>
+
+        <p className="mt-4 text-center text-xs text-muted">
           <a href="/privacy.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Polityka Prywatności
           </a>

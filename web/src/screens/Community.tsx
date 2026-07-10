@@ -28,11 +28,20 @@ import {
   type Conversation,
   type FriendsData,
   type UserSearchResult,
+  type EcoReport,
 } from '../lib/api'
 
 function minutesAgo(iso: string): number {
   const diffMs = Date.now() - new Date(iso).getTime()
   return Math.max(0, Math.round(diffMs / 60000))
+}
+
+function timeAgo(iso: string): string {
+  const mins = minutesAgo(iso)
+  if (mins < 1) return 'przed chwilą'
+  if (mins < 60) return `${mins} min temu`
+  if (mins < 1440) return `${Math.round(mins / 60)} godz. temu`
+  return new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })
 }
 
 const EMPTY_FRIENDS: FriendsData = { accepted: [], incoming: [], outgoing: [] }
@@ -54,6 +63,9 @@ export function Community() {
 
   // ── Wiadomości ──
   const [conversations, setConversations] = useState<Conversation[]>([])
+
+  // ── Feed eko ──
+  const [feed, setFeed] = useState<EcoReport[]>([])
 
   // ── Znajomi ──
   const [friends, setFriends] = useState<FriendsData>(EMPTY_FRIENDS)
@@ -86,6 +98,7 @@ export function Community() {
     loadOpenWalks()
     api.getConversations().then(setConversations).catch(() => {})
     loadFriends()
+    api.getEcoReports().then(setFeed).catch(() => {})
     const id = window.setInterval(loadOpenWalks, 30000)
     return () => window.clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -232,6 +245,53 @@ export function Community() {
                 </div>
               )}
             </section>
+
+            {/* ── Feed: ostatnio w społeczności ── */}
+            {feed.length > 0 && (
+              <section>
+                <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-ink">
+                  <Heart size={18} className="text-leaf" /> Ostatnio w społeczności
+                </h2>
+                <div className="space-y-2.5">
+                  {feed.slice(0, 10).map((r, i) => {
+                    const thumb = r.photoAfterUrl || r.photoUrl || r.photoBeforeUrl
+                    const isCleanup = r.kind === 'cleanup' || r.status === 'cleaned'
+                    return (
+                      <motion.div
+                        key={r.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                      >
+                        <Card className="flex items-center gap-3 p-3.5">
+                          {thumb ? (
+                            <img src={thumb} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+                          ) : (
+                            <Avatar name={r.author ?? '?'} size={44} />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-bold text-ink [overflow-wrap:anywhere]">
+                              {r.author ?? 'Ktoś'}{' '}
+                              <span className="font-semibold text-muted">
+                                {isCleanup ? 'posprzątał(a)' : 'zgłosił(a) problem'}
+                                {r.type ? ` • ${r.type}` : ''}
+                              </span>
+                            </div>
+                            {r.description && (
+                              <p className="truncate text-xs text-muted">{r.description}</p>
+                            )}
+                            {r.createdAt && (
+                              <p className="mt-0.5 text-[11px] font-bold text-muted/80">{timeAgo(r.createdAt)}</p>
+                            )}
+                          </div>
+                          <Pill tone={isCleanup ? 'leaf' : 'sand'}>{isCleanup ? '+25 pkt' : 'zgłoszone'}</Pill>
+                        </Card>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* ── Wiadomości ── */}
             {conversations.length > 0 && (

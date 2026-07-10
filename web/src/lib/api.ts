@@ -77,6 +77,8 @@ export interface EcoReport {
   photoBeforeUrl?: string | null
   photoAfterUrl?: string | null
   createdAt?: string
+  /** Imię autora — tylko w feedzie społeczności (GET /eco/reports). */
+  author?: string
 }
 
 export interface CreateEcoInput {
@@ -412,6 +414,7 @@ interface BackendEcoReport {
   photo_before_url: string | null
   photo_after_url: string | null
   created_at: string
+  author?: string
 }
 
 function mapEcoReport(r: BackendEcoReport): EcoReport {
@@ -426,6 +429,7 @@ function mapEcoReport(r: BackendEcoReport): EcoReport {
     photoBeforeUrl: r.photo_before_url,
     photoAfterUrl: r.photo_after_url,
     createdAt: r.created_at,
+    author: r.author,
   }
 }
 
