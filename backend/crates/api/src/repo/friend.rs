@@ -57,6 +57,13 @@ pub async fn send_request(
         }]));
     }
 
+    // Block gate (audit 2026-07-10): a block in either direction forbids
+    // re-inviting — without this, unfriend+block could be undone by a fresh
+    // request the victim accepts by mistake.
+    if crate::repo::block::is_blocked_either(pool, requester, addressee).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let mut tx = pool.begin().await.map_err(AppError::internal)?;
 
     // Check for any existing row in EITHER direction.

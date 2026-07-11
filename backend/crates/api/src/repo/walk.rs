@@ -131,6 +131,22 @@ async fn join_in_tx(
         _ => {}
     }
 
+    // Wyrzucony przez hosta nie wraca do TEJ sesji (kick, audyt B3.1) —
+    // rejoin-po-leave (N1) zostaje możliwy tylko dla nie-wyrzuconych.
+    let kicked: Option<bool> = sqlx::query_scalar(
+        "SELECT kicked_at IS NOT NULL FROM walk_participants \
+         WHERE session_id = $1 AND user_id = $2",
+    )
+    .bind(session_id)
+    .bind(actor)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(AppError::internal)?;
+
+    if kicked == Some(true) {
+        return Err(AppError::Forbidden);
+    }
+
     // Cap liczony bez samego aktora (jego powrót nie zjada miejsca).
     let active_others: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM walk_participants \
@@ -193,6 +209,12 @@ pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
         return Err(AppError::NotFound);
     }
 
+    // Block gate: osoba zablokowana (w dowolną stronę) nie dołącza do spaceru
+    // hosta — także otwartego (audyt 2026-07-10, wektor nękania przez open walks).
+    if crate::repo::block::is_blocked_either(pool, host_id, actor).await? {
+        return Err(AppError::Forbidden);
+    }
+
     if !is_open {
         // Powracający uczestnik był już wpuszczony — gate tylko dla nowych.
         let was_member: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
@@ -228,8 +250,8 @@ pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid
     // A join code is only valid while the session is active AND started within
     // the last 24h. This bounds the window in which a leaked code grants access
     // to the session's live feed and GPS track (security audit 2026-07-08).
-    let row: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM walk_sessions \
+    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, host_id FROM walk_sessions \
          WHERE join_code = $1 AND status = 'active' \
            AND started_at > now() - interval '24 hours'",
     )
@@ -238,7 +260,12 @@ pub async fn join_by_code(pool: &PgPool, code: &str, actor: Uuid) -> Result<Uuid
     .await
     .map_err(AppError::internal)?;
 
-    let (session_id,) = row.ok_or(AppError::NotFound)?;
+    let (session_id, host_id) = row.ok_or(AppError::NotFound)?;
+
+    // Block gate — jak w [`join`]: kod nie omija blokady hosta.
+    if crate::repo::block::is_blocked_either(pool, host_id, actor).await? {
+        return Err(AppError::Forbidden);
+    }
 
     // Wspólna transakcyjna ścieżka: cap bez wyścigu + rejoin po leave
     // (audyt B3.3 + N1). Join-by-code jest idempotentny: "already_joined"
@@ -347,6 +374,64 @@ pub async fn stop(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
     Ok(())
 }
 
+/// Kick `target` from an active session (host only; audit B3.1).
+///
+/// Sets `left_at` (if still in) AND `kicked_at`, which permanently bars the
+/// target from re-joining THIS session (the rejoin path checks `kicked_at`).
+/// The WS forwarder cuts the live stream within its re-check interval.
+///
+/// Errors: 422 kicking yourself; 403 not the host / session not active;
+/// 404 target was never a participant.
+pub async fn kick(
+    pool: &PgPool,
+    session_id: Uuid,
+    host: Uuid,
+    target: Uuid,
+) -> Result<(), AppError> {
+    if host == target {
+        return Err(AppError::Validation(vec![FieldError {
+            field: "user_id".into(),
+            message: "host cannot kick themselves — stop the walk instead".into(),
+            code: "SELF_KICK".into(),
+        }]));
+    }
+
+    let mut tx = pool.begin().await.map_err(AppError::internal)?;
+
+    let row: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT host_id, status FROM walk_sessions WHERE id = $1 FOR UPDATE",
+    )
+    .bind(session_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(AppError::internal)?;
+
+    match row {
+        Some((host_id, status)) if host_id == host && status == "active" => {}
+        Some(_) => return Err(AppError::Forbidden),
+        None => return Err(AppError::NotFound),
+    }
+
+    let rows = sqlx::query(
+        "UPDATE walk_participants \
+         SET left_at = COALESCE(left_at, now()), kicked_at = now() \
+         WHERE session_id = $1 AND user_id = $2",
+    )
+    .bind(session_id)
+    .bind(target)
+    .execute(&mut *tx)
+    .await
+    .map_err(AppError::internal)?
+    .rows_affected();
+
+    if rows == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    tx.commit().await.map_err(AppError::internal)?;
+    Ok(())
+}
+
 /// Fetch full walk detail (session + participants) for a member.
 ///
 /// Returns 403 if `actor` has never been a participant (left or not).
@@ -388,9 +473,14 @@ pub async fn get(
         session.join_code = None;
     }
 
+    // display_name w odpowiedzi: host (i uczestnicy) widzą KTO dołączył —
+    // minimalna osłona open walks przed anonimowym dołączającym (audyt B3.1).
     let participants: Vec<ParticipantInfo> = sqlx::query_as(
-        "SELECT id, session_id, user_id, joined_at, left_at, total_meters, total_points \
-         FROM walk_participants WHERE session_id = $1 ORDER BY joined_at",
+        "SELECT wp.id, wp.session_id, wp.user_id, u.display_name, \
+                wp.joined_at, wp.left_at, wp.total_meters, wp.total_points \
+         FROM walk_participants wp \
+         JOIN users u ON u.id = wp.user_id \
+         WHERE wp.session_id = $1 ORDER BY wp.joined_at",
     )
     .bind(session_id)
     .fetch_all(pool)

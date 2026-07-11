@@ -203,6 +203,29 @@ pub async fn stop_walk(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Body for `POST /api/v1/walks/:id/kick`.
+#[derive(Deserialize)]
+pub struct KickBody {
+    pub user_id: Uuid,
+}
+
+/// `POST /api/v1/walks/:id/kick`
+///
+/// Host-only: remove `user_id` from the session and bar them from re-joining
+/// it (audit B3.1 — hosts of open walks need control over who stays).
+///
+/// Returns 204; 403 not the host / session not active; 404 target never
+/// joined; 422 when trying to kick yourself.
+pub async fn kick_participant(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+    Json(body): Json<KickBody>,
+) -> Result<StatusCode, AppError> {
+    walk_repo::kick(&state.pool, session_id, auth.id, body.user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `GET /api/v1/walks/:id`
 ///
 /// Fetch full walk detail: session metadata and participants list.

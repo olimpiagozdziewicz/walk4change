@@ -1,3 +1,4 @@
+pub mod blocks;
 pub mod eco;
 pub mod friends;
 pub mod leaderboard;

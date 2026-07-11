@@ -51,6 +51,8 @@ pub struct ParticipantInfo {
     pub id: Uuid,
     pub session_id: Uuid,
     pub user_id: Uuid,
+    /// Who this is — hosts of open walks must see who joined (audit B3.1).
+    pub display_name: String,
     pub joined_at: DateTime<Utc>,
     pub left_at: Option<DateTime<Utc>>,
     pub total_meters: Decimal,

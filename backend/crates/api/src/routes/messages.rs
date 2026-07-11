@@ -74,6 +74,11 @@ pub async fn send_message(
     Path(user_id): Path<Uuid>,
     Json(body): Json<SendMessageBody>,
 ) -> Result<Response, AppError> {
+    // Per-ACCOUNT quota (audit N3/B1.6): 120/min per-IP still allowed one
+    // "friend" to firehose the victim; 30/min per account caps it sanely.
+    crate::util::ratelimit::check_message_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
     let id = Uuid::new_v4();
     let message = message_repo::send(&state.pool, id, auth.id, user_id, &body.body).await?;
     Ok((StatusCode::CREATED, response::data(message)).into_response())

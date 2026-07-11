@@ -1,32 +1,37 @@
-//! In-memory fixed-window per-IP rate limiter.
+//! In-memory fixed-window rate limiter, generic over the bucket key.
 //!
-//! Two instances are created in [`crate::build_app`]:
-//! - **auth** — strict bucket for `/api/v1/auth/*`
-//! - **global** — moderate bucket for all other routes
+//! Keyed by `IpAddr` (default) for the HTTP middleware in [`crate::build_app`]
+//! (auth + global tiers), and by `Uuid` for the per-ACCOUNT social-action
+//! limits (audit 2026-07-10 N3 — the per-IP tier does not stop one account
+//! from spamming messages/friend-requests/comments, and sockpuppets on
+//! different IPs each got a fresh bucket).
 //!
 //! Uses `std::time::Instant` (monotonic) for window tracking.
 
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
+
+use uuid::Uuid;
 
 struct Window {
     count: u32,
     start: Instant,
 }
 
-/// Thread-safe fixed-window per-IP rate limiter.
-pub struct RateLimiter {
-    buckets: Mutex<HashMap<IpAddr, Window>>,
+/// Thread-safe fixed-window rate limiter keyed by `K` (IP, account id, …).
+pub struct RateLimiter<K: Eq + Hash + Copy = IpAddr> {
+    buckets: Mutex<HashMap<K, Window>>,
     max_requests: u32,
     window: Duration,
     /// Monotonically increasing counter used to schedule periodic pruning.
     call_count: AtomicU64,
 }
 
-impl RateLimiter {
+impl<K: Eq + Hash + Copy> RateLimiter<K> {
     /// Create a new limiter allowing `max_requests` per `window_secs` seconds.
     pub fn new(max_requests: u32, window_secs: u64) -> Self {
         Self {
@@ -46,7 +51,7 @@ impl RateLimiter {
     ///
     /// Returns `Ok(())` if the request may proceed (counter is incremented).
     /// Returns `Err(retry_after_secs)` if quota is exhausted (≥1 second).
-    pub fn check(&self, ip: IpAddr) -> Result<(), u64> {
+    pub fn check(&self, ip: K) -> Result<(), u64> {
         let mut buckets = self
             .buckets
             .lock()
@@ -85,6 +90,39 @@ impl RateLimiter {
         entry.count += 1;
         Ok(())
     }
+}
+
+// ── per-ACCOUNT social-action limits (audit 2026-07-10 N3) ────────────────────
+//
+// Process-wide statics: the limits are account-scoped, so unlike the per-IP
+// tiers they need no per-`build_app` isolation (tests create fresh random
+// users, each with its own bucket). Windows are 60 s fixed.
+
+/// Direct messages: 30/min per account (audit B1.6 recommendation).
+static MESSAGE_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(30, 60));
+
+/// Friend requests: 15/min per account (invite-spam is the cheapest harassment).
+static FRIEND_REQUEST_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(15, 60));
+
+/// Eco feed writes (comments + like toggles combined): 30/min per account.
+static ECO_ACTION_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(30, 60));
+
+/// Per-account quota for `POST /messages/:user_id`.
+pub fn check_message_quota(user: Uuid) -> Result<(), u64> {
+    MESSAGE_LIMITER.check(user)
+}
+
+/// Per-account quota for `POST /friends/request`.
+pub fn check_friend_request_quota(user: Uuid) -> Result<(), u64> {
+    FRIEND_REQUEST_LIMITER.check(user)
+}
+
+/// Per-account quota for eco comment/like writes.
+pub fn check_eco_action_quota(user: Uuid) -> Result<(), u64> {
+    ECO_ACTION_LIMITER.check(user)
 }
 
 #[cfg(test)]

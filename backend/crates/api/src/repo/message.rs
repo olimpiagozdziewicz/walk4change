@@ -44,6 +44,12 @@ pub async fn send(
         return Err(AppError::Forbidden);
     }
 
+    // Defense in depth: blocking deletes the friendship (so the gate above
+    // already fails), but a re-accepted request must never bypass a live block.
+    if crate::repo::block::is_blocked_either(pool, sender, recipient).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let message: Message = sqlx::query_as(
         "INSERT INTO messages (id, sender_id, recipient_id, body) \
          VALUES ($1, $2, $3, $4) \

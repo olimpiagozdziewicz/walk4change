@@ -261,6 +261,11 @@ pub fn build_app(state: AppState) -> Router {
             axum::routing::delete(routes::friends::remove_friend),
         )
         .route("/api/v1/users/search", get(routes::users::search))
+        .route("/api/v1/blocks", get(routes::blocks::list_blocks))
+        .route(
+            "/api/v1/blocks/:user_id",
+            post(routes::blocks::block_user).delete(routes::blocks::unblock_user),
+        )
         .route(
             "/api/v1/conversations",
             get(routes::messages::list_conversations),
@@ -280,6 +285,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/walks/:id/join", post(routes::walks::join_walk))
         .route("/api/v1/walks/:id/leave", post(routes::walks::leave_walk))
         .route("/api/v1/walks/:id/stop", post(routes::walks::stop_walk))
+        .route("/api/v1/walks/:id/kick", post(routes::walks::kick_participant))
         .route("/api/v1/walks/:id/track", get(routes::walks::track_walk))
         .route(
             "/api/v1/leaderboard",

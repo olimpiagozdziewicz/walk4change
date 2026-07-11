@@ -39,6 +39,11 @@ pub async fn send_request(
     State(state): State<AppState>,
     Json(body): Json<SendRequestBody>,
 ) -> Result<StatusCode, AppError> {
+    // Per-ACCOUNT quota (audit N3): the per-IP tier lets a single account
+    // spam invites; sockpuppets on distinct IPs each got a fresh bucket.
+    crate::util::ratelimit::check_friend_request_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
     let id = Uuid::new_v4();
     friend_repo::send_request(&state.pool, id, auth.id, body.addressee_id).await?;
     Ok(StatusCode::CREATED)

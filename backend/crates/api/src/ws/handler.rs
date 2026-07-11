@@ -55,6 +55,29 @@ const MAX_WS_FRAME_BYTES: usize = 16 * 1024;
 /// hardening 2026-07-09).
 const WS_PING_MIN_INTERVAL: Duration = Duration::from_millis(1000);
 
+/// Capacity of the per-connection outbound queue. Previously unbounded: a
+/// slow client could grow it without limit (audit 2026-07-10). When full, the
+/// session forwarder blocks and the broadcast receiver lags — old frames are
+/// then dropped via `Lagged`, which live GPS tolerates by design.
+const WS_OUT_QUEUE_CAPACITY: usize = 256;
+
+/// How often the connection re-checks the JWT expiry. The token was only
+/// validated once at auth, so a socket outlived its TTL indefinitely
+/// (audit 2026-07-10 N2). Worst-case overrun past `exp` = one interval.
+const WS_TOKEN_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+
+/// Max concurrent session subscriptions per connection. Each subscription
+/// spawns a forwarder with DB re-checks, so an unbounded count let one socket
+/// multiply load (audit 2026-07-10 N2). A real client tracks 1 session
+/// (+ leaderboard, which is exempt).
+const MAX_WS_SUBSCRIPTIONS: usize = 8;
+
+/// How long a session forwarder trusts its cached membership verdict before
+/// re-querying the DB. Per-frame checks made a full N-person group cost ~N²
+/// queries per ping interval (audit 2026-07-10 part A). Revocation via
+/// leave/kick/stop takes effect within this window at worst.
+const FORWARDER_MEMBERSHIP_TTL: Duration = Duration::from_secs(10);
+
 /// Axum entry point: upgrade the connection and hand off to [`handle_socket`].
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -65,25 +88,38 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
 
     // ── auth-first-frame ──────────────────────────────────────────────────────
-    let actor = match authenticate(&mut sender, &mut receiver, &state).await {
-        Some(actor) => actor,
+    let (actor, token_exp) = match authenticate(&mut sender, &mut receiver, &state).await {
+        Some(auth) => auth,
         None => return, // error already reported (or socket closed); we're done.
     };
 
     // ── main event loop ───────────────────────────────────────────────────────
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<ServerFrame>();
+    let (out_tx, mut out_rx) = mpsc::channel::<ServerFrame>(WS_OUT_QUEUE_CAPACITY);
     let mut subscriptions: HashSet<Uuid> = HashSet::new();
     let mut leaderboard_subscribed = false;
     let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
     // Per-connection throttle state for inbound `Ping` frames (local to this
     // task — no shared state needed, see `WS_PING_MIN_INTERVAL`).
     let mut last_ping_at: Option<tokio::time::Instant> = None;
+    // Periodic JWT-expiry check (audit N2): the first tick fires immediately,
+    // which is harmless — the token was just validated.
+    let mut token_check = tokio::time::interval(WS_TOKEN_CHECK_INTERVAL);
+    token_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
             // Outbound broadcast frame → write to the socket.
             Some(frame) = out_rx.recv() => {
                 if sender.send(Message::Text(frame.to_json())).await.is_err() {
+                    break;
+                }
+            }
+
+            // JWT TTL enforcement: close the socket once the token expires
+            // instead of letting the connection outlive it (audit N2).
+            _ = token_check.tick() => {
+                if chrono::Utc::now().timestamp() >= token_exp {
+                    send_close_with_error(&mut sender, "token expired").await;
                     break;
                 }
             }
@@ -166,6 +202,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     }
 
                     ClientFrame::Subscribe { session_id } => {
+                        // Cap subscriptions per connection (audit N2): each one
+                        // spawns a forwarder task with DB re-checks.
+                        if !subscriptions.contains(&session_id)
+                            && subscriptions.len() >= MAX_WS_SUBSCRIPTIONS
+                        {
+                            let _ = sender
+                                .send(Message::Text(
+                                    ServerFrame::error("too many subscriptions").to_json(),
+                                ))
+                                .await;
+                            continue;
+                        }
                         // Spec §271: live subscription requires ACTIVE membership
                         // (session active AND left_at IS NULL). Historical access
                         // for members who have left is fine for HTTP GET, but not
@@ -223,14 +271,15 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
 /// Wait for and validate the first frame as [`ClientFrame::Auth`].
 ///
-/// Returns `Some(actor)` on success. On any failure (timeout, wrong frame type,
-/// invalid token, oversized frame, transport error) an error frame is sent and
-/// `None` is returned so the caller drops the socket.
+/// Returns `Some((actor, token_exp))` on success — the expiry is enforced
+/// periodically by the main loop (audit N2). On any failure (timeout, wrong
+/// frame type, invalid token, oversized frame, transport error) an error frame
+/// is sent and `None` is returned so the caller drops the socket.
 async fn authenticate(
     sender: &mut SplitSink<WebSocket, Message>,
     receiver: &mut SplitStream<WebSocket>,
     state: &AppState,
-) -> Option<Uuid> {
+) -> Option<(Uuid, i64)> {
     let first = match tokio::time::timeout(WS_AUTH_TIMEOUT, receiver.next()).await {
         Ok(Some(Ok(msg))) => msg,
         Ok(Some(Err(_))) | Ok(None) => return None, // transport error / closed
@@ -261,7 +310,7 @@ async fn authenticate(
 
     match serde_json::from_str::<ClientFrame>(&text) {
         Ok(ClientFrame::Auth { token }) => match crate::auth::jwt::decode(&state.config, &token) {
-            Ok(claims) => Some(claims.sub),
+            Ok(claims) => Some((claims.sub, claims.exp)),
             Err(_) => {
                 send_close_with_error(sender, "invalid token").await;
                 None
@@ -294,7 +343,7 @@ async fn handle_ping(
     lng: f64,
     recorded_at: chrono::DateTime<chrono::Utc>,
     accuracy: Option<f64>,
-    out_tx: &mpsc::UnboundedSender<ServerFrame>,
+    out_tx: &mpsc::Sender<ServerFrame>,
     subscriptions: &mut HashSet<Uuid>,
     forwarders: &mut Vec<JoinHandle<()>>,
 ) {
@@ -392,15 +441,18 @@ async fn handle_ping(
 ///
 /// `Lagged(n)` is treated as "skip and keep going" (never closes the socket).
 /// The task exits when the broadcast channel closes or `out_tx` has no receiver.
+/// `out_tx` is bounded: when a slow client fills it, `send().await` applies
+/// backpressure here and the broadcast receiver lags (drops old frames)
+/// instead of growing memory without limit (audit 2026-07-10).
 fn spawn_forwarder(
     mut rx: broadcast::Receiver<ServerFrame>,
-    out_tx: mpsc::UnboundedSender<ServerFrame>,
+    out_tx: mpsc::Sender<ServerFrame>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             match rx.recv().await {
                 Ok(frame) => {
-                    if out_tx.send(frame).is_err() {
+                    if out_tx.send(frame).await.is_err() {
                         break; // connection task gone
                     }
                 }
@@ -414,32 +466,50 @@ fn spawn_forwarder(
 /// Spawn a task that forwards session broadcast frames into the connection's `out_tx`,
 /// revoking the subscription when the actor is no longer an active participant.
 ///
-/// Spec §271: once `left_at` is set (via /leave), the forwarder stops relaying
-/// live GPS frames to the departed subscriber. The check is per-frame (frames
-/// are low-rate/throttled, so the DB round-trip is acceptable). The leaderboard
-/// forwarder does NOT require this check.
+/// Spec §271: once `left_at` is set (via /leave, kick or stop), the forwarder
+/// stops relaying live GPS frames to the departed subscriber.
+///
+/// The membership verdict is CACHED for [`FORWARDER_MEMBERSHIP_TTL`] instead
+/// of being re-queried per frame: with N subscribers each verifying every
+/// frame, a full group session cost ~N² queries per ping interval against a
+/// 10-connection pool (audit 2026-07-10 part A). Worst-case revocation delay
+/// is one TTL — acceptable for live GPS, and kick also bars re-join.
 ///
 /// Fails closed: any DB error is treated as "no longer active" to prevent
 /// inadvertent data leakage.
 fn spawn_session_forwarder(
     mut rx: broadcast::Receiver<ServerFrame>,
-    out_tx: mpsc::UnboundedSender<ServerFrame>,
+    out_tx: mpsc::Sender<ServerFrame>,
     pool: sqlx::PgPool,
     session_id: Uuid,
     actor: Uuid,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        // (when the verdict was fetched, verdict) — None until the first frame.
+        let mut membership: Option<(tokio::time::Instant, bool)> = None;
         loop {
             match rx.recv().await {
                 Ok(frame) => {
-                    // Revoke subscription when the actor is no longer an active participant.
-                    match walk::is_active_participant(&pool, session_id, actor).await {
-                        Ok(true) => {
-                            if out_tx.send(frame).is_err() {
+                    let stale = match membership {
+                        Some((checked_at, _)) => {
+                            checked_at.elapsed() >= FORWARDER_MEMBERSHIP_TTL
+                        }
+                        None => true,
+                    };
+                    if stale {
+                        let active =
+                            walk::is_active_participant(&pool, session_id, actor)
+                                .await
+                                .unwrap_or(false); // Err → fail-closed
+                        membership = Some((tokio::time::Instant::now(), active));
+                    }
+                    match membership {
+                        Some((_, true)) => {
+                            if out_tx.send(frame).await.is_err() {
                                 break; // connection task gone
                             }
                         }
-                        // Ok(false) → left the session; Err(_) → fail-closed.
+                        // left / kicked / session stopped / DB error → stop relaying.
                         _ => break,
                     }
                 }

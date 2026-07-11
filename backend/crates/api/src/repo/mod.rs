@@ -1,3 +1,4 @@
+pub mod block;
 pub mod friend;
 pub mod magic;
 pub mod message;

@@ -231,13 +231,23 @@ pub async fn toggle_like(
     State(state): State<AppState>,
     Path(report_id): Path<uuid::Uuid>,
 ) -> Result<Json<Value>, AppError> {
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM eco_reports WHERE id = $1)")
-        .bind(report_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(AppError::internal)?;
-    if !exists {
-        return Err(AppError::NotFound);
+    crate::util::ratelimit::check_eco_action_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
+    let owner: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT user_id FROM eco_reports WHERE id = $1")
+            .bind(report_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(AppError::internal)?;
+    let owner = owner.ok_or(AppError::NotFound)?;
+
+    // Block gate (audit 2026-07-10): a blocked person could still like/comment
+    // the victim's eco posts — the harassment surface is wider than the chat.
+    if owner != auth.id
+        && crate::repo::block::is_blocked_either(&state.pool, owner, auth.id).await?
+    {
+        return Err(AppError::Forbidden);
     }
 
     let deleted = sqlx::query("DELETE FROM eco_likes WHERE report_id = $1 AND user_id = $2")
@@ -332,13 +342,22 @@ pub async fn create_comment(
         }]));
     }
 
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM eco_reports WHERE id = $1)")
-        .bind(report_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(AppError::internal)?;
-    if !exists {
-        return Err(AppError::NotFound);
+    crate::util::ratelimit::check_eco_action_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
+    let owner: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT user_id FROM eco_reports WHERE id = $1")
+            .bind(report_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(AppError::internal)?;
+    let owner = owner.ok_or(AppError::NotFound)?;
+
+    // Block gate — same rationale as in `toggle_like`.
+    if owner != auth.id
+        && crate::repo::block::is_blocked_either(&state.pool, owner, auth.id).await?
+    {
+        return Err(AppError::Forbidden);
     }
 
     let id = uuid::Uuid::new_v4();
