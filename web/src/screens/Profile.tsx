@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut } from '@phosphor-icons/react'
+import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit } from '@phosphor-icons/react'
 import { Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { FootstepTrail } from '../components/Footsteps'
-import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward } from '../lib/api'
+import { Avatar } from '../components/Avatar'
+import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward, type BlockedUser } from '../lib/api'
 import { getInterests, saveInterests } from '../lib/interests'
 import { getGender, saveGender, type Gender } from '../lib/settings'
 import { logout } from '../lib/auth'
@@ -21,6 +22,8 @@ export function Profile() {
   const [nameInput, setNameInput] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [ecoReports, setEcoReports] = useState<EcoReport[]>([])
+  const [blocked, setBlocked] = useState<BlockedUser[]>([])
+  const [unblockingId, setUnblockingId] = useState<string | null>(null)
   const [redemptions, setRedemptions] = useState<RedemptionItem[]>([])
   const [rewardTitles, setRewardTitles] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -59,8 +62,23 @@ export function Profile() {
     })()
   }
 
+  const unblock = async (id: string) => {
+    if (unblockingId) return
+    setUnblockingId(id)
+    try {
+      await api.unblockUser(id)
+      setBlocked((cur) => cur.filter((b) => b.id !== id))
+    } catch {
+      /* lista się nie zmieni — user spróbuje ponownie */
+    } finally {
+      setUnblockingId(null)
+    }
+  }
+
   useEffect(() => {
     loadProfile()
+    // Zablokowani — best-effort, sekcja znika przy błędzie/braku.
+    api.getBlockedUsers().then(setBlocked).catch(() => {})
     // Moje kody nagród — best-effort, sekcja znika przy błędzie/braku.
     api.getMyRedemptions().then(setRedemptions).catch(() => {})
     api
@@ -300,6 +318,31 @@ export function Profile() {
                   </Card>
                 )
               })}
+            </div>
+          </>
+        )}
+
+        {/* zablokowani */}
+        {blocked.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-6 flex items-center gap-2 font-display text-lg font-bold text-ink">
+              <Prohibit size={18} className="text-muted" /> Zablokowani
+            </h2>
+            <div className="space-y-2.5">
+              {blocked.map((b) => (
+                <Card key={b.id} className="flex items-center gap-3 p-3.5">
+                  <Avatar name={b.name} size={36} />
+                  <span className="min-w-0 flex-1 text-sm font-bold text-ink">{b.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => unblock(b.id)}
+                    disabled={unblockingId === b.id}
+                    className="shrink-0 rounded-full bg-sea/10 px-3 py-1.5 text-xs font-bold text-deep transition active:scale-95 disabled:opacity-50"
+                  >
+                    Odblokuj
+                  </button>
+                </Card>
+              ))}
             </div>
           </>
         )}
