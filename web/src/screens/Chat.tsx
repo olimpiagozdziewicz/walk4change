@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { CaretLeft, PaperPlaneRight } from '@phosphor-icons/react'
+import { CaretLeft, PaperPlaneRight, Prohibit } from '@phosphor-icons/react'
 import { Avatar } from '../components/Avatar'
 import { currentUserId } from '../lib/auth'
 import { ApiError } from '../lib/http'
@@ -35,6 +35,9 @@ export function Chat() {
   const [sendError, setSendError] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  // blokada rozmówcy: pierwszy klik uzbraja, drugi blokuje i wraca do listy
+  const [blockArmed, setBlockArmed] = useState(false)
+  const [blocking, setBlocking] = useState(false)
 
   const myId = currentUserId()
   const seenIdsRef = useRef<Set<string>>(new Set())
@@ -149,6 +152,25 @@ export function Chat() {
     }
   }
 
+  const blockPartner = async () => {
+    if (!userId || blocking) return
+    if (!blockArmed) {
+      setBlockArmed(true)
+      window.setTimeout(() => setBlockArmed(false), 4000)
+      return
+    }
+    setBlocking(true)
+    try {
+      await api.blockUser(userId)
+      navigate('/community')
+    } catch {
+      setSendError('Nie udało się zablokować — spróbuj ponownie.')
+    } finally {
+      setBlocking(false)
+      setBlockArmed(false)
+    }
+  }
+
   if (!userId) {
     return (
       <div className="px-5 pt-6">
@@ -172,6 +194,18 @@ export function Chat() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-lg font-bold text-ink">{displayName}</div>
         </div>
+        <button
+          type="button"
+          onClick={blockPartner}
+          disabled={blocking}
+          aria-label={`Zablokuj ${displayName}`}
+          title="Zablokuj — kończy znajomość i zamyka ten czat na stałe"
+          className={`inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-xs font-bold transition active:scale-95 disabled:opacity-50 ${
+            blockArmed ? 'bg-rose-500/15 text-rose-600' : 'glass text-muted'
+          }`}
+        >
+          <Prohibit size={16} /> {blockArmed ? 'Zablokować?' : ''}
+        </button>
       </header>
 
       <div className="min-w-0 px-5 pb-4 pt-1">

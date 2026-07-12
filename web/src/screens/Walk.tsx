@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { Play, Square, UsersThree, Leaf, Trophy, Footprints, MapPin, SignIn, Copy, CheckCircle, HandHeart } from '@phosphor-icons/react'
+import { Play, Square, UsersThree, Leaf, Trophy, Footprints, MapPin, SignIn, Copy, CheckCircle, HandHeart, ThumbsUp, ThumbsDown } from '@phosphor-icons/react'
 import { ScreenHeader, Card, PrimaryButton, SoftButton, Pill } from '../components/ui'
 import { FootstepTrail } from '../components/Footsteps'
 import { Celebrate } from '../components/Celebrate'
@@ -11,6 +11,7 @@ import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
+import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
 
@@ -78,6 +79,37 @@ export function Walk() {
   const lastSentRef = useRef(0)
   const [summary, setSummary] = useState<{ points: number; meters: number; steps: number; together: boolean; nature: boolean } | null>(null)
   const { steps, permissionNeeded, requestPermission, addMeters, reset: resetSteps } = useStepCounter()
+
+  // uczestnicy z serwera (autorytatywna lista) + kick dla hosta
+  const [walkDetail, setWalkDetail] = useState<WalkDetailInfo | null>(null)
+  const [kickArmedId, setKickArmedId] = useState<string | null>(null)
+  const [kickingId, setKickingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (phase !== 'active' || !sessionId) return
+    const load = () => { api.getWalkDetail(sessionId).then(setWalkDetail).catch(() => {}) }
+    load()
+    const id = window.setInterval(load, 15000)
+    return () => window.clearInterval(id)
+  }, [phase, sessionId])
+
+  const kick = async (userId: string) => {
+    if (kickArmedId !== userId) {
+      setKickArmedId(userId)
+      return
+    }
+    setKickingId(userId)
+    try {
+      await api.kickParticipant(sessionId, userId)
+      const d = await api.getWalkDetail(sessionId)
+      setWalkDetail(d)
+    } catch {
+      /* lista się nie zmieni — host spróbuje ponownie */
+    } finally {
+      setKickingId(null)
+      setKickArmedId(null)
+    }
+  }
 
   useEffect(() => {
     if (phase === 'active') {
@@ -432,6 +464,33 @@ export function Walk() {
                 </div>
               )}
 
+              {/* gospodarz widzi, kto dołączył, i może wyrzucić uczestnika */}
+              {walkDetail?.hostId === currentUserId() &&
+                walkDetail.participants.some((p) => p.userId !== currentUserId() && !p.leftAt) && (
+                <Card className="mt-3 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted">Uczestnicy Twojego spaceru</p>
+                  <div className="mt-2 space-y-1.5">
+                    {walkDetail.participants
+                      .filter((p) => p.userId !== currentUserId() && !p.leftAt)
+                      .map((p) => (
+                        <div key={p.userId} className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{p.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => kick(p.userId)}
+                            disabled={kickingId === p.userId}
+                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition active:scale-95 disabled:opacity-50 ${
+                              kickArmedId === p.userId ? 'bg-rose-500/15 text-rose-600' : 'bg-white/70 text-muted'
+                            }`}
+                          >
+                            {kickArmedId === p.userId ? 'Wyrzucić?' : 'Wyrzuć'}
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </Card>
+              )}
+
               <button onClick={stopWalk} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6b4b4] bg-white/80 py-4 text-base font-bold text-[#c0504d] transition active:scale-[0.97]"><Square size={18} weight="fill" color="#c0504d" /> Zakończ spacer</button>
             </motion.div>
           )}
@@ -454,6 +513,7 @@ export function Walk() {
                 </div>
                 <p className="mt-4 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-[#2f7a45]"><HandHeart size={16} weight="fill" /> Jesteś coraz bliżej adopcji foki!</p>
               </Card>
+              <RatingPanel sessionId={sessionId} />
               {leaderboard.length > 0 && (
                 <Card className="mt-4 p-4">
                   <p className="text-xs font-bold uppercase tracking-wide text-muted">Ranking</p>
@@ -466,6 +526,129 @@ export function Walk() {
         </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+/**
+ * Panel ocen po spacerze (spec 2026-07-13): 👍 polecam / 👎 nie polecam per
+ * współuczestnik; 👎 rozwija flagi problemowe (niepubliczne — moderacja).
+ * Sesja musi być zakończona przez gospodarza; uczestnik, który wyszedł
+ * wcześniej, widzi podpowiedź zamiast przycisków.
+ */
+function RatingPanel({ sessionId }: { sessionId: string }) {
+  const myId = currentUserId()
+  const [detail, setDetail] = useState<WalkDetailInfo | null>(null)
+  const [verdicts, setVerdicts] = useState<Record<string, boolean>>({})
+  const [flagFor, setFlagFor] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!sessionId) return
+    api.getWalkDetail(sessionId).then(setDetail).catch(() => {})
+    api
+      .getMyWalkRatings(sessionId)
+      .then((rs) => setVerdicts(Object.fromEntries(rs.map((r) => [r.userId, r.recommend]))))
+      .catch(() => {})
+  }, [sessionId])
+
+  if (!sessionId || !detail) return null
+  const others = detail.participants.filter((p) => p.userId !== myId)
+  if (others.length === 0) return null
+
+  if (detail.status !== 'finished') {
+    return (
+      <Card className="mt-4 p-4">
+        <p className="text-sm text-muted">Ocenisz współuczestników, gdy gospodarz zakończy spacer.</p>
+      </Card>
+    )
+  }
+
+  const send = async (userId: string, recommend: boolean, flag?: RatingFlag) => {
+    if (busyId) return
+    setBusyId(userId)
+    setError(null)
+    try {
+      await api.rateParticipant(sessionId, userId, recommend, flag)
+      setVerdicts((v) => ({ ...v, [userId]: recommend }))
+      setFlagFor(null)
+    } catch {
+      setError('Nie udało się zapisać oceny — spróbuj ponownie.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const FLAGS: { key: RatingFlag; label: string }[] = [
+    { key: 'no_show', label: 'Nie pojawił(a) się' },
+    { key: 'unsafe', label: 'Niepokojące zachowanie' },
+    { key: 'spam', label: 'Spam / naciąganie' },
+    { key: 'other', label: 'Inny problem' },
+  ]
+
+  return (
+    <Card className="mt-4 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">Jak było? Oceń współuczestników</p>
+      <div className="mt-2 space-y-2">
+        {others.map((p) => {
+          const verdict = verdicts[p.userId]
+          return (
+            <div key={p.userId}>
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{p.name}</span>
+                <button
+                  type="button"
+                  onClick={() => send(p.userId, true)}
+                  disabled={busyId === p.userId}
+                  aria-label={`Polecam: ${p.name}`}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition active:scale-90 disabled:opacity-50 ${
+                    verdict === true ? 'bg-leaf/20 text-leaf' : 'bg-white/70 text-muted'
+                  }`}
+                >
+                  <ThumbsUp size={16} weight={verdict === true ? 'fill' : 'regular'} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlagFor(flagFor === p.userId ? null : p.userId)}
+                  disabled={busyId === p.userId}
+                  aria-label={`Nie polecam: ${p.name}`}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition active:scale-90 disabled:opacity-50 ${
+                    verdict === false ? 'bg-rose-500/15 text-rose-600' : 'bg-white/70 text-muted'
+                  }`}
+                >
+                  <ThumbsDown size={16} weight={verdict === false ? 'fill' : 'regular'} />
+                </button>
+              </div>
+              {flagFor === p.userId && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => send(p.userId, false)}
+                    className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-muted transition active:scale-95"
+                  >
+                    Po prostu nie polecam
+                  </button>
+                  {FLAGS.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => send(p.userId, false, f.key)}
+                      className="rounded-full bg-rose-500/10 px-3 py-1 text-xs font-bold text-rose-600 transition active:scale-95"
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
+      <p className="mt-2 text-[11px] text-muted">
+        Oceny budują zaufanie w SeaSteps. Zgłoszenia problemów nie są publiczne — trafiają do moderacji.
+      </p>
+    </Card>
   )
 }
 

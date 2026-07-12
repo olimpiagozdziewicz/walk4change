@@ -715,6 +715,9 @@ export interface OpenWalkItem {
   note: string
   startedAt: string
   participants: number
+  /** Reputacja hosta: liczba wszystkich ocen (agregat pokazujemy od ≥3). */
+  hostRatingTotal: number
+  hostRecommendCount: number
 }
 
 async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
@@ -725,6 +728,8 @@ async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
     open_note: string | null
     started_at: string
     participants: number
+    host_rating_total?: number
+    host_recommend_count?: number
   }[]>('/walks/open')
   return (res.data ?? []).map((w) => ({
     sessionId: w.session_id,
@@ -733,12 +738,118 @@ async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
     note: w.open_note ?? '',
     startedAt: w.started_at,
     participants: w.participants,
+    hostRatingTotal: w.host_rating_total ?? 0,
+    hostRecommendCount: w.host_recommend_count ?? 0,
   }))
 }
 
 /** Dołącz do otwartego spaceru (bez znajomości; 409 = komplet uczestników). */
 async function joinOpenWalk(sessionId: string): Promise<void> {
   await apiRequest(`/walks/${sessionId}/join`, { method: 'POST', body: {} })
+}
+
+// ── Blokady (backend: /blocks*) ───────────────────────────
+export interface BlockedUser {
+  id: string
+  name: string
+  avatar: string
+}
+
+/** Zablokuj: tnie znajomość i zamyka czat, zaproszenia, eko, dołączanie do spacerów. */
+async function blockUser(userId: string): Promise<void> {
+  await apiRequest(`/blocks/${userId}`, { method: 'POST', body: {} })
+}
+
+async function unblockUser(userId: string): Promise<void> {
+  await apiRequest(`/blocks/${userId}`, { method: 'DELETE' })
+}
+
+async function fetchBlockedUsers(): Promise<BlockedUser[]> {
+  const res = await apiRequest<{ id: string; display_name: string; avatar_url: string | null }[]>(
+    '/blocks',
+  )
+  return (res.data ?? []).map((u) => ({ id: u.id, name: u.display_name, avatar: u.avatar_url || '🌊' }))
+}
+
+// ── Uczestnicy sesji + kick (backend: /walks/:id, /walks/:id/kick) ──
+export interface WalkParticipant {
+  userId: string
+  name: string
+  leftAt: string | null
+}
+
+export interface WalkDetailInfo {
+  hostId: string
+  status: string
+  participants: WalkParticipant[]
+}
+
+async function fetchWalkDetail(sessionId: string): Promise<WalkDetailInfo> {
+  const res = await apiRequest<{
+    session: { host_id: string; status: string }
+    participants: { user_id: string; display_name: string; left_at: string | null }[]
+  }>(`/walks/${sessionId}`)
+  const d = res.data
+  return {
+    hostId: d?.session.host_id ?? '',
+    status: d?.session.status ?? '',
+    participants: (d?.participants ?? []).map((p) => ({
+      userId: p.user_id,
+      name: p.display_name,
+      leftAt: p.left_at,
+    })),
+  }
+}
+
+/** Wyrzuć uczestnika (tylko host) — wyrzucony nie wróci do tej sesji. */
+async function kickParticipant(sessionId: string, userId: string): Promise<void> {
+  await apiRequest(`/walks/${sessionId}/kick`, { method: 'POST', body: { user_id: userId } })
+}
+
+// ── Oceny po spacerze (backend: /walks/:id/rate, /users/:id/rating) ──
+export type RatingFlag = 'no_show' | 'unsafe' | 'spam' | 'other'
+
+export interface MyWalkRating {
+  userId: string
+  recommend: boolean
+  flag: RatingFlag | null
+}
+
+/** Oceń współuczestnika zakończonego spaceru (okno 48 h; ponowny POST nadpisuje). */
+async function rateParticipant(
+  sessionId: string,
+  userId: string,
+  recommend: boolean,
+  flag?: RatingFlag,
+): Promise<void> {
+  await apiRequest(`/walks/${sessionId}/rate`, {
+    method: 'POST',
+    body: { user_id: userId, recommend, flag: flag ?? null },
+  })
+}
+
+async function fetchMyWalkRatings(sessionId: string): Promise<MyWalkRating[]> {
+  const res = await apiRequest<{ user_id: string; recommend: boolean; flag: RatingFlag | null }[]>(
+    `/walks/${sessionId}/ratings/mine`,
+  )
+  return (res.data ?? []).map((r) => ({ userId: r.user_id, recommend: r.recommend, flag: r.flag }))
+}
+
+export interface UserRating {
+  total: number
+  recommendCount: number
+  visible: boolean
+}
+
+async function fetchUserRating(userId: string): Promise<UserRating> {
+  const res = await apiRequest<{ total: number; recommend_count: number; visible: boolean }>(
+    `/users/${userId}/rating`,
+  )
+  return {
+    total: res.data?.total ?? 0,
+    recommendCount: res.data?.recommend_count ?? 0,
+    visible: res.data?.visible ?? false,
+  }
 }
 
 // ── Historia spacerów z serwera (backend: /me/walks, /walks/:id/track) ──
@@ -858,6 +969,14 @@ export const api = {
   sendMessage: sendChatMessage,
   getOpenWalks: fetchOpenWalks,
   joinOpenWalk,
+  blockUser,
+  unblockUser,
+  getBlockedUsers: fetchBlockedUsers,
+  getWalkDetail: fetchWalkDetail,
+  kickParticipant,
+  rateParticipant,
+  getMyWalkRatings: fetchMyWalkRatings,
+  getUserRating: fetchUserRating,
   toggleEcoLike,
   getEcoComments: fetchEcoComments,
   addEcoComment,

@@ -131,6 +131,9 @@ pub struct ConversationSummary {
 
 /// One row of `GET /api/v1/walks/open`: a live walk whose host opted in
 /// to be visible ("spaceruję — dołącz").
+///
+/// `host_rating_total` / `host_recommend_count` power the trust badge next to
+/// the host (spec 2026-07-13); clients hide them below 3 ratings.
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct OpenWalk {
     pub session_id: Uuid,
@@ -139,6 +142,25 @@ pub struct OpenWalk {
     pub open_note: Option<String>,
     pub started_at: DateTime<Utc>,
     pub participants: i64,
+    pub host_rating_total: i64,
+    pub host_recommend_count: i64,
+}
+
+/// One of the caller's own post-walk ratings (`GET /walks/:id/ratings/mine`).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MyRating {
+    pub user_id: Uuid,
+    pub recommend: bool,
+    pub flag: Option<String>,
+}
+
+/// Reputation aggregate for a user (`GET /users/:id/rating`).
+#[derive(Debug, Serialize)]
+pub struct RatingAggregate {
+    pub total: i64,
+    pub recommend_count: i64,
+    /// `total >= 3` — below that a rating would identify its author.
+    pub visible: bool,
 }
 
 /// One row of `GET /api/v1/me/walks`: a finished walk of the caller.

@@ -4,6 +4,7 @@ pub mod friends;
 pub mod leaderboard;
 pub mod messages;
 pub mod profile;
+pub mod ratings;
 pub mod rewards;
 pub mod stats;
 pub mod users;

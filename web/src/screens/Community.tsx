@@ -13,6 +13,8 @@ import {
   UserPlus,
   MagnifyingGlass,
   PaperPlaneRight,
+  Prohibit,
+  ThumbsUp,
   X,
 } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
@@ -159,6 +161,28 @@ export function Community() {
     } finally {
       setUnfriendingId(null)
       setUnfriendArmedId(null)
+    }
+  }
+
+  // blokada: pierwszy klik uzbraja ("Zablokować?"), drugi blokuje na stałe
+  const [blockArmedId, setBlockArmedId] = useState<string | null>(null)
+  const [blockingId, setBlockingId] = useState<string | null>(null)
+
+  const block = async (id: string) => {
+    if (blockArmedId !== id) {
+      setBlockArmedId(id)
+      setUnfriendArmedId(null)
+      return
+    }
+    setBlockingId(id)
+    try {
+      await api.blockUser(id)
+      loadFriends()
+    } catch {
+      /* lista się nie zmieni — user spróbuje ponownie */
+    } finally {
+      setBlockingId(null)
+      setBlockArmedId(null)
     }
   }
 
@@ -348,7 +372,14 @@ export function Community() {
                           <div className="flex items-center gap-3">
                             <Avatar name={w.hostName} size={48} />
                             <div className="min-w-0 flex-1">
-                              <div className="font-display text-lg font-bold text-ink">{w.hostName}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-display text-lg font-bold text-ink">{w.hostName}</span>
+                                {w.hostRatingTotal >= 3 && (
+                                  <Pill tone="leaf">
+                                    <ThumbsUp size={12} weight="fill" /> {w.hostRecommendCount}/{w.hostRatingTotal}
+                                  </Pill>
+                                )}
+                              </div>
                               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-bold text-muted">
                                 <span className="inline-flex items-center gap-1">
                                   <UsersThree size={12} /> {w.participants} uczestników
@@ -621,6 +652,18 @@ export function Community() {
                             }`}
                           >
                             {unfriendArmedId === f.id ? 'Na pewno?' : <X size={15} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => block(f.id)}
+                            disabled={blockingId === f.id}
+                            aria-label={`Zablokuj ${f.name}`}
+                            title="Zablokuj — kończy znajomość i zamyka czat, zaproszenia i wspólne spacery"
+                            className={`shrink-0 rounded-full px-2.5 py-2 text-xs font-bold transition active:scale-95 disabled:opacity-50 ${
+                              blockArmedId === f.id ? 'bg-rose-500/15 text-rose-600' : 'text-muted'
+                            }`}
+                          >
+                            {blockArmedId === f.id ? 'Zablokować?' : <Prohibit size={15} />}
                           </button>
                         </div>
                       </Card>

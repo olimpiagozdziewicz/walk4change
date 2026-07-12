@@ -286,6 +286,12 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/walks/:id/leave", post(routes::walks::leave_walk))
         .route("/api/v1/walks/:id/stop", post(routes::walks::stop_walk))
         .route("/api/v1/walks/:id/kick", post(routes::walks::kick_participant))
+        .route("/api/v1/walks/:id/rate", post(routes::ratings::rate_participant))
+        .route(
+            "/api/v1/walks/:id/ratings/mine",
+            get(routes::ratings::my_ratings),
+        )
+        .route("/api/v1/users/:id/rating", get(routes::ratings::user_rating))
         .route("/api/v1/walks/:id/track", get(routes::walks::track_walk))
         .route(
             "/api/v1/leaderboard",

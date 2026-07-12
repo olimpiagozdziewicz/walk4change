@@ -593,7 +593,11 @@ pub async fn open_walks(pool: &PgPool) -> Result<Vec<OpenWalk>, AppError> {
         "SELECT ws.id AS session_id, ws.host_id, u.display_name AS host_name, \
                 ws.open_note, ws.started_at, \
                 (SELECT count(*) FROM walk_participants wp \
-                  WHERE wp.session_id = ws.id AND wp.left_at IS NULL) AS participants \
+                  WHERE wp.session_id = ws.id AND wp.left_at IS NULL) AS participants, \
+                (SELECT count(*) FROM walk_ratings r \
+                  WHERE r.rated_id = ws.host_id) AS host_rating_total, \
+                (SELECT count(*) FROM walk_ratings r \
+                  WHERE r.rated_id = ws.host_id AND r.recommend) AS host_recommend_count \
          FROM walk_sessions ws \
          JOIN users u ON u.id = ws.host_id \
          WHERE ws.is_open AND ws.status = 'active' \
