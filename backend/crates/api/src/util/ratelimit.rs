@@ -125,6 +125,25 @@ pub fn check_eco_action_quota(user: Uuid) -> Result<(), u64> {
     ECO_ACTION_LIMITER.check(user)
 }
 
+/// Verification-mail requests: 3/min per account — mail is expensive (SMTP
+/// relay limit ~3–4/h) and re-sends are a spam vector (spec 2026-07-13).
+static VERIFY_EMAIL_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(3, 60));
+
+/// GDPR data export: 1/min per account — the export walks most tables.
+static EXPORT_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(1, 60));
+
+/// Per-account quota for `POST /auth/verify-email/request`.
+pub fn check_verify_email_quota(user: Uuid) -> Result<(), u64> {
+    VERIFY_EMAIL_LIMITER.check(user)
+}
+
+/// Per-account quota for `GET /me/export`.
+pub fn check_export_quota(user: Uuid) -> Result<(), u64> {
+    EXPORT_LIMITER.check(user)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

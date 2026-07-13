@@ -18,6 +18,7 @@ struct PendingRow {
     pub bio: Option<String>,
     pub interests: Vec<String>,
     pub created_at: DateTime<Utc>,
+    pub email_verified: bool,
 }
 
 impl From<PendingRow> for PendingItem {
@@ -32,6 +33,7 @@ impl From<PendingRow> for PendingItem {
                 bio: r.bio,
                 interests: r.interests,
                 created_at: r.created_at,
+                email_verified: r.email_verified,
             },
         }
     }
@@ -199,7 +201,8 @@ pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     // Accepted: the other party's profile, direction-agnostic.
     let accepted: Vec<Profile> = sqlx::query_as(
         "SELECT u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
-                u.interests, u.created_at \
+                u.interests, u.created_at, \
+                (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \
          JOIN users u ON u.id = CASE \
                  WHEN f.requester_id = $1 THEN f.addressee_id \
@@ -217,7 +220,8 @@ pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     let incoming_rows: Vec<PendingRow> = sqlx::query_as(
         "SELECT f.id AS request_id, \
                 u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
-                u.interests, u.created_at \
+                u.interests, u.created_at, \
+                (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \
          JOIN users u ON u.id = f.requester_id \
          WHERE f.addressee_id = $1 AND f.status = 'pending'",
@@ -231,7 +235,8 @@ pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     let outgoing_rows: Vec<PendingRow> = sqlx::query_as(
         "SELECT f.id AS request_id, \
                 u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
-                u.interests, u.created_at \
+                u.interests, u.created_at, \
+                (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \
          JOIN users u ON u.id = f.addressee_id \
          WHERE f.requester_id = $1 AND f.status = 'pending'",

@@ -51,6 +51,11 @@ pub async fn start_walk(
     body: Option<Json<StartWalkBody>>,
 ) -> Result<Response, AppError> {
     let StartWalkBody { is_open, open_note } = body.map(|Json(b)| b).unwrap_or_default();
+    // Open-walks gate (spec 2026-07-13): listing yourself publicly to
+    // strangers requires a verified e-mail. Private/friend walks do not.
+    if is_open && !crate::repo::user::is_email_verified(&state.pool, auth.id).await? {
+        return Err(AppError::EmailNotVerified);
+    }
     let session_id = Uuid::new_v4();
     let session = walk_repo::start(
         &state.pool,
@@ -87,6 +92,11 @@ pub async fn patch_walk(
     Path(session_id): Path<Uuid>,
     Json(body): Json<PatchWalkBody>,
 ) -> Result<StatusCode, AppError> {
+    // Same open-walks gate as start_walk — toggling open mid-walk also
+    // exposes the host publicly (spec 2026-07-13).
+    if body.is_open && !crate::repo::user::is_email_verified(&state.pool, auth.id).await? {
+        return Err(AppError::EmailNotVerified);
+    }
     walk_repo::set_open(
         &state.pool,
         session_id,

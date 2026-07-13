@@ -13,6 +13,9 @@ pub struct Profile {
     pub bio: Option<String>,
     pub interests: Vec<String>,
     pub created_at: DateTime<Utc>,
+    /// `email_verified_at IS NOT NULL` — every query returning a Profile must
+    /// select this alias (spec 2026-07-13, open-walks gate).
+    pub email_verified: bool,
 }
 
 /// A pending friendship request bundled with the other party's profile.

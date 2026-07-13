@@ -20,18 +20,20 @@ export function Login() {
   )
   const [loading, setLoading] = useState(false)
   const [magicMsg, setMagicMsg] = useState<string | null>(null)
+  const [terms, setTerms] = useState(false)
 
   const submit = async () => {
     setError(null)
     setMagicMsg(null)
     if (!email || !pass) { setError('Podaj e-mail i hasło.'); return }
     if (tab === 'signup' && pass !== pass2) { setError('Hasła się nie zgadzają.'); return }
+    if (tab === 'signup' && !terms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
     setLoading(true)
     try {
       if (tab === 'login') {
         await login(email, pass)
       } else {
-        await register(email, pass, email.split('@')[0])
+        await register(email, pass, email.split('@')[0], terms)
       }
       nav('/')
     } catch (err: unknown) {
@@ -128,6 +130,21 @@ export function Login() {
                 <Lock size={18} className="text-muted" />
                 <input value={pass2} onChange={(e) => setPass2(e.target.value)} type="password" placeholder="••••••••" className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted/70" />
               </div>
+              <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={terms}
+                  onChange={(e) => setTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]"
+                />
+                <span>
+                  Akceptuję{' '}
+                  <a href="/regulamin.html" target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a>
+                  {' '}i{' '}
+                  <a href="/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>{' '}
+                  SeaSteps.
+                </span>
+              </label>
             </>
           )}
 
@@ -153,6 +170,12 @@ export function Login() {
             albo wyślij magiczny link →
           </button>
           {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
+          <p className="mt-3 text-center text-[11px] leading-snug text-muted">
+            Logując się magicznym linkiem, akceptujesz{' '}
+            <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a>
+            {' '}i{' '}
+            <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
+          </p>
         </div>
       </div>
     </div>

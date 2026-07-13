@@ -60,6 +60,7 @@ async fn register_user(app: &common::TestApp, email: &str) -> (Uuid, String) {
             "email": email,
             "password": "password123",
             "display_name": "SmokeUser",
+            "accepted_terms": true,
         }))
         .send()
         .await

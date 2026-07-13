@@ -13,7 +13,7 @@ use crate::{
     auth::{extractor::AuthUser, jwt, password},
     error::{AppError, FieldError},
     mail,
-    repo::{magic as magic_repo, user as user_repo},
+    repo::{magic as magic_repo, user as user_repo, verify as verify_repo},
     state::AppState,
 };
 
@@ -27,6 +27,45 @@ pub struct RegisterRequest {
     pub email: String,
     pub password: String,
     pub display_name: String,
+    /// Sign-up consent to the terms + privacy policy (RODO, spec 2026-07-13).
+    /// Defaults to false so older clients get a clear TERMS_REQUIRED error.
+    #[serde(default)]
+    pub accepted_terms: bool,
+}
+
+/// Push a TERMS_REQUIRED field error when sign-up consent is missing.
+fn require_terms(errors: &mut Vec<FieldError>, accepted: bool) {
+    if !accepted {
+        errors.push(FieldError {
+            field: "accepted_terms".into(),
+            message: "terms and privacy policy must be accepted".into(),
+            code: "TERMS_REQUIRED".into(),
+        });
+    }
+}
+
+/// Mint a verification token and e-mail the confirmation link.
+/// Errors bubble up; callers on the registration path treat this as
+/// best-effort (mail outage must not break sign-up).
+async fn send_verification_mail(
+    state: &AppState,
+    user_id: Uuid,
+    email: &str,
+) -> Result<(), AppError> {
+    let mail_cfg = state
+        .config
+        .mail
+        .as_ref()
+        .ok_or_else(|| AppError::internal("verification email is not configured"))?;
+
+    let token = random_string(48);
+    verify_repo::create_token(&state.pool, &token, user_id).await?;
+    let link = format!(
+        "{}/auth/verify-email?token={}",
+        state.config.app_url.trim_end_matches('/'),
+        token
+    );
+    mail::send_verification_email(mail_cfg, email, &link).await
 }
 
 #[derive(Deserialize)]
@@ -73,6 +112,7 @@ pub async fn register(
         });
     }
     crate::util::validate::check_max_len(&mut errors, "display_name", display_name, 80);
+    require_terms(&mut errors, body.accepted_terms);
 
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
@@ -80,7 +120,13 @@ pub async fn register(
 
     let id = Uuid::new_v4();
     let password_hash = password::hash(&state.config, &body.password)?;
-    user_repo::create(&state.pool, id, &email, &password_hash, display_name).await?;
+    user_repo::create(&state.pool, id, &email, &password_hash, display_name, true).await?;
+
+    // Best-effort verification mail — a mail outage must not break sign-up
+    // (the user can re-request from their profile).
+    if let Err(e) = send_verification_mail(&state, id, &email).await {
+        tracing::warn!(user = %id, error = %e, "verification mail failed at registration");
+    }
 
     let profile = user_repo::get_profile(&state.pool, id).await?;
     let token = jwt::encode(&state.config, id)?;
@@ -140,6 +186,10 @@ pub async fn logout(_auth: AuthUser) -> (StatusCode, HeaderMap) {
 #[derive(Deserialize)]
 pub struct MagicRequest {
     pub email: String,
+    /// Consent to terms + privacy (clause under the magic-link form).
+    /// Required only when the request CREATES a new account.
+    #[serde(default)]
+    pub accepted_terms: bool,
 }
 
 /// `POST /api/v1/auth/magic/request`
@@ -170,10 +220,16 @@ pub async fn magic_request(
     let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
         Some(u) => u.id,
         None => {
+            // Creating an account requires sign-up consent (RODO, spec 2026-07-13).
+            let mut errors = Vec::new();
+            require_terms(&mut errors, body.accepted_terms);
+            if !errors.is_empty() {
+                return Err(AppError::Validation(errors));
+            }
             let id = Uuid::new_v4();
             let hash = password::hash(&state.config, &random_string(40))?;
             let display = email.split('@').next().unwrap_or("walker");
-            user_repo::create(&state.pool, id, &email, &hash, display).await?;
+            user_repo::create(&state.pool, id, &email, &hash, display, true).await?;
             id
         }
     };
@@ -201,14 +257,60 @@ pub async fn magic_verify(
     Json(body): Json<MagicVerify>,
 ) -> Result<Json<Value>, AppError> {
     let user_id = magic_repo::consume_token(&state.pool, body.token.trim()).await?;
+    // Consuming a mailed one-time token proves mailbox ownership.
+    user_repo::set_email_verified(&state.pool, user_id).await?;
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
     Ok(Json(json!({ "token": token, "data": profile })))
 }
 
+/// `POST /api/v1/auth/verify-email/request`
+///
+/// Send (or re-send) the e-mail verification link for the authenticated user.
+/// Idempotent when already verified (204 without sending). Rate-limited
+/// 3/min per account. 204 on success.
+pub async fn verify_email_request(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, AppError> {
+    crate::util::ratelimit::check_verify_email_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
+    let profile = user_repo::get_profile(&state.pool, auth.id).await?;
+    if profile.email_verified {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    send_verification_mail(&state, auth.id, &profile.email).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct VerifyEmailConfirm {
+    pub token: String,
+}
+
+/// `POST /api/v1/auth/verify-email/confirm`
+///
+/// Consume a verification token and mark the e-mail verified. Unlike
+/// magic-link, this NEVER mints a session (a verification mail must not be a
+/// login credential). Invalid/expired token → 401.
+pub async fn verify_email_confirm(
+    State(state): State<AppState>,
+    Json(body): Json<VerifyEmailConfirm>,
+) -> Result<Json<Value>, AppError> {
+    let user_id = verify_repo::consume_token(&state.pool, body.token.trim()).await?;
+    user_repo::set_email_verified(&state.pool, user_id).await?;
+    Ok(Json(json!({ "data": { "verified": true } })))
+}
+
 #[derive(Deserialize)]
 pub struct SupabaseExchange {
     pub access_token: String,
+    /// Consent to terms + privacy (clause under the magic-link form).
+    /// Required only when the exchange CREATES a new account.
+    #[serde(default)]
+    pub accepted_terms: bool,
 }
 
 #[derive(Deserialize)]
@@ -259,13 +361,22 @@ pub async fn supabase_exchange(
     let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
         Some(u) => u.id,
         None => {
+            // Creating an account requires sign-up consent (RODO, spec 2026-07-13).
+            let mut errors = Vec::new();
+            require_terms(&mut errors, body.accepted_terms);
+            if !errors.is_empty() {
+                return Err(AppError::Validation(errors));
+            }
             let id = Uuid::new_v4();
             let hash = password::hash(&state.config, &random_string(40))?;
             let display = email.split('@').next().unwrap_or("walker");
-            user_repo::create(&state.pool, id, &email, &hash, display).await?;
+            user_repo::create(&state.pool, id, &email, &hash, display, true).await?;
             id
         }
     };
+
+    // Supabase already validated the mailbox via its own magic link.
+    user_repo::set_email_verified(&state.pool, user_id).await?;
 
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;

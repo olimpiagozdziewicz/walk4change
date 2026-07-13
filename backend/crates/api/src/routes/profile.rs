@@ -1,11 +1,16 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
     auth::extractor::AuthUser,
     error::{AppError, FieldError},
-    repo::user as user_repo,
+    repo::{gdpr as gdpr_repo, user as user_repo},
     response,
     state::AppState,
 };
@@ -91,4 +96,49 @@ pub async fn patch_me(
 
     let profile = user_repo::update_profile(&state.pool, auth.id, patch).await?;
     Ok(response::data(profile))
+}
+
+/// `DELETE /api/v1/me`
+///
+/// RODO account deletion (spec 2026-07-13): hard-deletes personal data and
+/// anonymises the user row — see [`gdpr_repo::delete_account`]. The client
+/// confirms intent in the UI; the JWT stops working immediately afterwards
+/// (extractor checks `deleted_at`). Returns 204.
+pub async fn delete_me(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, AppError> {
+    gdpr_repo::delete_account(&state.pool, auth.id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/v1/me/export`
+///
+/// RODO data export (art. 20): full JSON of the user's personal data, served
+/// as a download. Rate-limited 1/min per account (walks most tables).
+pub async fn export_me(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Response, AppError> {
+    crate::util::ratelimit::check_export_quota(auth.id)
+        .map_err(|_| AppError::RateLimited)?;
+
+    let export = gdpr_repo::export(&state.pool, auth.id).await?;
+    let filename = format!(
+        "seasteps-export-{}.json",
+        chrono::Utc::now().format("%Y-%m-%d")
+    );
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/json".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        Json(export),
+    )
+        .into_response())
 }

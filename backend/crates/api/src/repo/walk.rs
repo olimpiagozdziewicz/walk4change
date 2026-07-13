@@ -215,20 +215,28 @@ pub async fn join(pool: &PgPool, session_id: Uuid, actor: Uuid) -> Result<(), Ap
         return Err(AppError::Forbidden);
     }
 
-    if !is_open {
-        // Powracający uczestnik był już wpuszczony — gate tylko dla nowych.
-        let was_member: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
-            "SELECT left_at FROM walk_participants WHERE session_id = $1 AND user_id = $2",
-        )
-        .bind(session_id)
-        .bind(actor)
-        .fetch_optional(pool)
-        .await
-        .map_err(AppError::internal)?;
+    // Powracający uczestnik był już wpuszczony — gate'y tylko dla nowych.
+    let was_member: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
+        "SELECT left_at FROM walk_participants WHERE session_id = $1 AND user_id = $2",
+    )
+    .bind(session_id)
+    .bind(actor)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::internal)?;
 
+    if !is_open {
         if was_member.is_none() && !friend::are_friends(pool, host_id, actor).await? {
             return Err(AppError::Forbidden);
         }
+    } else if was_member.is_none()
+        && actor != host_id
+        && !friend::are_friends(pool, host_id, actor).await?
+        && !crate::repo::user::is_email_verified(pool, actor).await?
+    {
+        // Obcy wchodzący z publicznej listy open-walks musi mieć potwierdzony
+        // e-mail (spec 2026-07-13); znajomych hosta gate nie dotyczy.
+        return Err(AppError::EmailNotVerified);
     }
 
     let mut tx = pool.begin().await.map_err(AppError::internal)?;

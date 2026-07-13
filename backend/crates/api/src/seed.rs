@@ -121,7 +121,8 @@ async fn upsert_user(
 
     // Hash and insert.
     let hash = password::hash(cfg, plain_password)?;
-    crate::repo::user::create(pool, id, email, &hash, display_name).await.map_err(|e| {
+    // Seed/demo accounts count as consenting (they are ours, not real users).
+    crate::repo::user::create(pool, id, email, &hash, display_name, true).await.map_err(|e| {
         // Another concurrent insert (race) may have won; ignore conflicts here.
         match e {
             AppError::Conflict(_) => AppError::internal("concurrent seed conflict"),

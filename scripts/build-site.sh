@@ -14,7 +14,7 @@ echo "==> building web app (base=/app/)"
 
 echo "==> assembling combined site at $OUT"
 rm -rf "$OUT"; mkdir -p "$OUT/app"
-cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" "$OUT/"
+cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/regulamin.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" "$OUT/"
 cp -r "$ROOT/web/dist/." "$OUT/app/"
 
 cat > "$OUT/vercel.json" <<'JSON'

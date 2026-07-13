@@ -13,7 +13,8 @@ async fn register_returns_201_token_and_profile() {
         .json(&json!({
             "email": "alice@example.com",
             "password": "password123",
-            "display_name": "Alice"
+            "display_name": "Alice",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -43,7 +44,8 @@ async fn register_duplicate_email_returns_409() {
     let payload = json!({
         "email": "bob@example.com",
         "password": "password123",
-        "display_name": "Bob"
+        "display_name": "Bob",
+        "accepted_terms": true
     });
 
     let first = app
@@ -75,7 +77,8 @@ async fn login_correct_password_returns_200_and_token() {
         .json(&json!({
             "email": "carol@example.com",
             "password": "password123",
-            "display_name": "Carol"
+            "display_name": "Carol",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -107,7 +110,8 @@ async fn login_wrong_password_returns_401() {
         .json(&json!({
             "email": "dave@example.com",
             "password": "password123",
-            "display_name": "Dave"
+            "display_name": "Dave",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -157,7 +161,8 @@ async fn register_short_password_returns_422() {
         .json(&json!({
             "email": "eve@example.com",
             "password": "short",
-            "display_name": "Eve"
+            "display_name": "Eve",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -177,7 +182,8 @@ async fn logout_clears_session_cookie() {
         .json(&json!({
             "email": "frank@example.com",
             "password": "password123",
-            "display_name": "Frank"
+            "display_name": "Frank",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -216,7 +222,8 @@ async fn register_rejects_too_long_password() {
         .json(&json!({
             "email": "toolong@example.com",
             "password": long_password,
-            "display_name": "TooLong"
+            "display_name": "TooLong",
+            "accepted_terms": true
         }))
         .send()
         .await
@@ -236,7 +243,8 @@ async fn login_enumeration_responses_are_identical() {
         .json(&json!({
             "email": "known@example.com",
             "password": "password123",
-            "display_name": "KnownUser"
+            "display_name": "KnownUser",
+            "accepted_terms": true
         }))
         .send()
         .await

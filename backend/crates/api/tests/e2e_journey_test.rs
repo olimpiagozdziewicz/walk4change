@@ -120,6 +120,7 @@ async fn register_user(
             "email": email,
             "password": "password123",
             "display_name": display_name,
+            "accepted_terms": true,
         }))
         .send()
         .await

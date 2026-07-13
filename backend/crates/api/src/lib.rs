@@ -236,9 +236,20 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/auth/magic/verify", post(auth::handlers::magic_verify))
         .route("/api/v1/auth/supabase", post(auth::handlers::supabase_exchange))
         .route(
-            "/api/v1/me",
-            get(routes::profile::get_me).patch(routes::profile::patch_me),
+            "/api/v1/auth/verify-email/request",
+            post(auth::handlers::verify_email_request),
         )
+        .route(
+            "/api/v1/auth/verify-email/confirm",
+            post(auth::handlers::verify_email_confirm),
+        )
+        .route(
+            "/api/v1/me",
+            get(routes::profile::get_me)
+                .patch(routes::profile::patch_me)
+                .delete(routes::profile::delete_me),
+        )
+        .route("/api/v1/me/export", get(routes::profile::export_me))
         .route("/api/v1/me/stats", get(routes::stats::get_me_stats))
         .route(
             "/api/v1/eco/reports",

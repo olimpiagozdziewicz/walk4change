@@ -22,6 +22,10 @@ pub enum AppError {
     Unauthorized,
     #[error("Forbidden")]
     Forbidden,
+    /// 403 with a distinct code so the client can show a "verify your e-mail"
+    /// CTA instead of a generic error (open-walks gate, spec 2026-07-13).
+    #[error("E-mail not verified")]
+    EmailNotVerified,
     #[error("Not found")]
     NotFound,
     #[error("Conflict: {0}")]
@@ -55,6 +59,12 @@ impl IntoResponse for AppError {
                 StatusCode::FORBIDDEN,
                 "FORBIDDEN",
                 "Forbidden".to_string(),
+                None,
+            ),
+            AppError::EmailNotVerified => (
+                StatusCode::FORBIDDEN,
+                "EMAIL_NOT_VERIFIED",
+                "E-mail address is not verified".to_string(),
                 None,
             ),
             AppError::NotFound => (

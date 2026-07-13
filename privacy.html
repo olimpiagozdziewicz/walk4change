@@ -6,7 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="apple-touch-icon" href="favicon.svg" />
 <meta name="theme-color" content="#0f8b8d" />
-<meta name="description" content="Polityka Prywatności serwisu SeaSteps." />
+<meta name="description" content="Polityka Prywatności serwisu i aplikacji SeaSteps." />
 <meta name="robots" content="noindex" />
 <title>Polityka Prywatności · SeaSteps</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -39,6 +39,9 @@
   ul{margin:0 0 12px; padding-left:22px;}
   li{margin:4px 0;}
   .muted{color:var(--muted); font-size:14px;}
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid rgba(93,124,129,.18); vertical-align:top;}
+  th{color:var(--deep); font-family:var(--display);}
   @media(max-width:560px){ .card{padding:24px 18px;} h1{font-size:25px;} }
 </style>
 </head>
@@ -46,77 +49,117 @@
   <div class="wrap">
     <a class="back" href="/">◂ Wróć do SeaSteps</a>
     <div class="card">
-      <h1>Polityka Prywatności serwisu SeaSteps</h1>
-      <p class="date">Data obowiązywania: 28 czerwca 2026</p>
+      <h1>Polityka Prywatności SeaSteps</h1>
+      <p class="date">Wersja 2026-07-13 (zastępuje wersję z 28 czerwca 2026)</p>
 
-      <p>Dziękujemy za odwiedzenie strony SeaSteps. Szanujemy Twoją prywatność i dbamy o bezpieczeństwo przekazywanych nam danych osobowych.</p>
+      <p>Ta polityka opisuje, jakie dane osobowe przetwarzamy w serwisie
+      <strong>seasteps.pl</strong> i w aplikacji SeaSteps (webowej i mobilnej),
+      po co, na jakiej podstawie i jakie masz prawa.</p>
 
       <h2>1. Administrator danych</h2>
-      <p>Administratorem danych osobowych jest: <strong>SeaSteps</strong><br />
-      e-mail: <a href="mailto:h4cstolik3@gmail.com">h4cstolik3@gmail.com</a></p>
-      <p>W przypadku pytań dotyczących przetwarzania danych osobowych możesz skontaktować się z nami pod wskazanym adresem e-mail.</p>
+      <p>Administratorem danych osobowych jest <strong>Olimpia Goździewicz</strong>,
+      prowadząca projekt SeaSteps.<br />
+      Kontakt we wszystkich sprawach dotyczących danych:
+      <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a></p>
 
-      <h2>2. Jakie dane zbieramy?</h2>
-      <p>Za pośrednictwem formularza zapisu zbieramy wyłącznie dane, które użytkownik podaje dobrowolnie:</p>
+      <h2>2. Jakie dane przetwarzamy i po co</h2>
+      <table>
+        <tr><th>Dane</th><th>Cel</th><th>Podstawa prawna</th></tr>
+        <tr><td>Konto: e-mail, nazwa wyświetlana, opcjonalnie avatar, opis, zainteresowania</td>
+            <td>założenie i obsługa konta, logowanie (w tym magiczny link), weryfikacja e-maila</td>
+            <td>art. 6 ust. 1 lit. b RODO (umowa o świadczenie usługi)</td></tr>
+        <tr><td><strong>Lokalizacja GPS podczas spaceru</strong> (trasa, dystans, czas)</td>
+            <td>rdzeń usługi: liczenie kroków-punktów, mnożniki za naturę i wspólny spacer, mapa live dla uczestników sesji</td>
+            <td>art. 6 ust. 1 lit. b RODO</td></tr>
+        <tr><td>Wiadomości 1:1 ze znajomymi</td>
+            <td>czat w aplikacji</td>
+            <td>art. 6 ust. 1 lit. b RODO</td></tr>
+        <tr><td>Oceny po spacerze (polecam/nie polecam, opcjonalna flaga i komentarz), blokady użytkowników</td>
+            <td>bezpieczeństwo społeczności: reputacja przy otwartych spacerach, ochrona przed nękaniem</td>
+            <td>art. 6 ust. 1 lit. f RODO (uzasadniony interes: bezpieczeństwo użytkowników)</td></tr>
+        <tr><td>Eko-zgłoszenia (opis, lokalizacja opisowa, zdjęcia)</td>
+            <td>funkcja zgłaszania i sprzątania zanieczyszczeń</td>
+            <td>art. 6 ust. 1 lit. b RODO</td></tr>
+        <tr><td>Dane techniczne: adres IP, logi serwera, identyfikatory żądań</td>
+            <td>bezpieczeństwo, limity zapytań (ochrona przed nadużyciami), diagnostyka błędów</td>
+            <td>art. 6 ust. 1 lit. f RODO</td></tr>
+        <tr><td>Zgoda na regulamin i politykę (data, wersja)</td>
+            <td>rozliczalność</td>
+            <td>art. 6 ust. 1 lit. c RODO</td></tr>
+      </table>
+
+      <p><strong>Ważne — lokalizacja:</strong> pozycję GPS zbieramy <strong>tylko w
+      trakcie aktywnego spaceru</strong> (od startu do zakończenia), nigdy w tle poza
+      spacerem. W aplikacji mobilnej śledzenie w trakcie spaceru może działać przy
+      zgaszonym ekranie (widoczne powiadomienie systemowe). Twoją trasę na żywo widzą
+      wyłącznie uczestnicy tej samej sesji spaceru.</p>
+      <p>Nie profilujemy i nie podejmujemy zautomatyzowanych decyzji wywołujących
+      skutki prawne. Nie sprzedajemy danych.</p>
+
+      <h2>3. Jak długo przechowujemy dane</h2>
       <ul>
-        <li>imię,</li>
-        <li>adres e-mail.</li>
+        <li>dane konta, trasy GPS, wiadomości, oceny, blokady — do usunięcia konta;</li>
+        <li>tokeny logowania (magiczny link) — 15 minut; tokeny weryfikacji e-maila — 24 godziny;</li>
+        <li>zdjęcia eko-zgłoszeń — do usunięcia konta, przy czym kopie plików w magazynie
+            zdjęć czyścimy niezwłocznie, nie później niż w ciągu 30 dni;</li>
+        <li>logi techniczne — krótkoterminowo, w cyklu rotacji logów;</li>
+        <li>zapisy wymian punktów na nagrody — do 6 lat (rozliczenia z partnerami).</li>
       </ul>
-      <p>Podanie danych jest dobrowolne, jednak niezbędne do otrzymywania informacji o projekcie i organizowanych wydarzeniach.</p>
+      <p>Po usunięciu konta wpisy o wspólnych spacerach pozostają w danych pozostałych
+      uczestników w formie zanonimizowanej („Konto usunięte"), bez Twojej trasy GPS.</p>
 
-      <h2>3. W jakim celu przetwarzamy dane?</h2>
-      <p>Przetwarzamy dane wyłącznie w celu:</p>
+      <h2>4. Usuwanie konta i eksport danych — samodzielnie w aplikacji</h2>
       <ul>
-        <li>poinformowania o uruchomieniu projektu SeaSteps,</li>
-        <li>przesyłania informacji o organizowanych wydarzeniach,</li>
-        <li>kontaktu z osobami zainteresowanymi udziałem w projekcie.</li>
+        <li><strong>Usuń konto:</strong> Profil → Twoje dane → „Usuń konto". Operacja jest
+            nieodwracalna i natychmiastowa: kasuje trasy GPS, wiadomości, znajomości,
+            oceny, blokady i eko-zgłoszenia oraz anonimizuje profil.</li>
+        <li><strong>Pobierz moje dane:</strong> Profil → Twoje dane → „Pobierz" — pełna kopia
+            Twoich danych w pliku JSON (prawo do przenoszenia, art. 20 RODO).</li>
       </ul>
-      <p>Nie wykorzystujemy danych do profilowania ani zautomatyzowanego podejmowania decyzji.</p>
 
-      <h2>4. Podstawa prawna przetwarzania</h2>
-      <p>Dane przetwarzamy na podstawie art. 6 ust. 1 lit. a Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679 (RODO), czyli na podstawie dobrowolnie wyrażonej zgody.</p>
-
-      <h2>5. Jak długo przechowujemy dane?</h2>
-      <p>Dane przechowujemy do momentu:</p>
+      <h2>5. Odbiorcy danych (podmioty przetwarzające)</h2>
+      <p>Dane przetwarzają w naszym imieniu dostawcy infrastruktury, wyłącznie na nasze
+      polecenie i na podstawie umów powierzenia:</p>
       <ul>
-        <li>wycofania zgody przez użytkownika,</li>
-        <li>zakończenia realizacji celu, dla którego zostały zebrane.</li>
+        <li><strong>Microsoft Azure</strong> — serwer aplikacji (backend),</li>
+        <li><strong>Supabase</strong> — baza danych, logowanie magicznym linkiem, magazyn zdjęć,</li>
+        <li><strong>Vercel</strong> — hosting strony i aplikacji webowej,</li>
+        <li>dostawca poczty e-mail — wysyłka maili logowania i weryfikacji.</li>
       </ul>
-      <p>Po tym czasie dane zostaną usunięte lub zanonimizowane.</p>
+      <p>Niektórzy dostawcy mogą przetwarzać dane poza Europejskim Obszarem Gospodarczym —
+      w takim wypadku odbywa się to na podstawie standardowych klauzul umownych (SCC)
+      lub decyzji Komisji Europejskiej stwierdzających odpowiedni stopień ochrony.</p>
 
-      <h2>6. Odbiorcy danych</h2>
-      <p>Dane mogą zostać powierzone podmiotom świadczącym usługi niezbędne do funkcjonowania serwisu, takim jak:</p>
-      <ul>
-        <li>dostawca hostingu,</li>
-        <li>dostawca poczty elektronicznej,</li>
-        <li>dostawca narzędzia do wysyłki wiadomości (jeżeli będzie wykorzystywane).</li>
-      </ul>
-      <p>Podmioty te przetwarzają dane wyłącznie na nasze polecenie i zgodnie z obowiązującymi przepisami.</p>
+      <h2>6. Twoje prawa</h2>
+      <p>Masz prawo do: dostępu do danych, sprostowania, usunięcia, ograniczenia
+      przetwarzania, przenoszenia danych, sprzeciwu wobec przetwarzania opartego na
+      uzasadnionym interesie oraz wniesienia skargi do Prezesa Urzędu Ochrony Danych
+      Osobowych (uodo.gov.pl). Z praw skorzystasz w aplikacji (pkt 4) albo pisząc na
+      <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a>.</p>
 
-      <h2>7. Prawa użytkownika</h2>
-      <p>Każdej osobie, której dane dotyczą, przysługuje prawo do:</p>
-      <ul>
-        <li>dostępu do swoich danych,</li>
-        <li>sprostowania danych,</li>
-        <li>usunięcia danych,</li>
-        <li>ograniczenia przetwarzania,</li>
-        <li>przenoszenia danych,</li>
-        <li>wycofania zgody w dowolnym momencie,</li>
-        <li>wniesienia skargi do Prezesa Urzędu Ochrony Danych Osobowych.</li>
-      </ul>
-      <p>Wycofanie zgody nie wpływa na zgodność z prawem przetwarzania, którego dokonano przed jej wycofaniem.</p>
+      <h2>7. Wiek użytkowników</h2>
+      <p>Z SeaSteps możesz samodzielnie korzystać od <strong>16 roku życia</strong>.
+      Osoby młodsze — wyłącznie za zgodą i pod opieką rodzica lub opiekuna prawnego.</p>
 
-      <h2>8. Pliki cookies</h2>
-      <p>Strona może wykorzystywać pliki cookies niezbędne do prawidłowego działania serwisu oraz – w przypadku ich wdrożenia – narzędzia analityczne pomagające rozwijać projekt.</p>
-      <p>Szczegółowe informacje dotyczące cookies będą dostępne po wdrożeniu odpowiednich narzędzi.</p>
+      <h2>8. Pliki cookies i pamięć lokalna</h2>
+      <p>Aplikacja używa pamięci lokalnej przeglądarki (localStorage) wyłącznie do
+      utrzymania zalogowania (token sesji) i podstawowych ustawień. Strona i aplikacja
+      nie używają obecnie cookies reklamowych ani zewnętrznych narzędzi analitycznych;
+      jeśli to się zmieni, zaktualizujemy tę politykę i poprosimy o zgodę tam, gdzie
+      jest wymagana.</p>
 
-      <h2>9. Bezpieczeństwo danych</h2>
-      <p>Dokładamy wszelkich starań, aby chronić dane osobowe przed utratą, nieuprawnionym dostępem lub ujawnieniem. Stosujemy odpowiednie środki techniczne i organizacyjne zapewniające bezpieczeństwo przetwarzanych informacji.</p>
+      <h2>9. Bezpieczeństwo</h2>
+      <p>Stosujemy środki techniczne i organizacyjne adekwatne do ryzyka: szyfrowanie
+      transmisji (HTTPS), hasła przechowywane wyłącznie jako silne skróty (Argon2),
+      ograniczenia dostępu do infrastruktury, limity zapytań i mechanizmy
+      anty-nadużyciowe (blokowanie, oceny, moderacja).</p>
 
-      <h2>10. Zmiany polityki prywatności</h2>
-      <p>Niniejsza Polityka Prywatności może być aktualizowana w przypadku zmian w przepisach prawa lub rozwoju projektu SeaSteps. Aktualna wersja będzie zawsze dostępna na stronie internetowej.</p>
+      <h2>10. Zmiany polityki</h2>
+      <p>O istotnych zmianach poinformujemy w aplikacji lub e-mailem. Aktualna wersja
+      jest zawsze dostępna pod adresem seasteps.pl/privacy.html.</p>
 
-      <p class="muted">W sprawach dotyczących ochrony danych osobowych prosimy o kontakt pod adresem: <a href="mailto:h4cstolik3@gmail.com">h4cstolik3@gmail.com</a></p>
+      <p class="muted">Zobacz też: <a href="/regulamin.html">Regulamin SeaSteps</a>.
+      Kontakt w sprawach danych: <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a></p>
     </div>
   </div>
 </body>

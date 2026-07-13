@@ -44,6 +44,15 @@ impl FromRequestParts<AppState> for AuthUser {
         };
 
         let claims = jwt::decode(&state.config, &token)?;
+
+        // RODO delete (spec 2026-07-13): a JWT minted before account deletion
+        // must stop working immediately. One indexed PK lookup per request is
+        // acceptable at the current scale ceiling (~100–300 concurrent users,
+        // audit 2026-07-10); revisit with a JWT claim + cache when scaling.
+        if crate::repo::user::is_deleted(&state.pool, claims.sub).await? {
+            return Err(AppError::Unauthorized);
+        }
+
         Ok(AuthUser { id: claims.sub })
     }
 }
