@@ -14,6 +14,8 @@ export { API_BASE }
 export interface Profile {
   id: string
   name: string
+  email: string
+  emailVerified: boolean
   avatar: string // emoji lub URL
   interests: string[]
   stats: {
@@ -277,6 +279,7 @@ interface BackendProfile {
   bio: string | null
   interests: string[]
   created_at: string
+  email_verified: boolean
 }
 
 interface BackendReward {
@@ -300,6 +303,8 @@ function mapProfile(p: BackendProfile): Profile {
   return {
     id: p.id,
     name: p.display_name,
+    email: p.email,
+    emailVerified: p.email_verified ?? false,
     // backend trzyma URL/null; UI używa emoji — fallback gdy brak URL-a
     avatar: p.avatar_url ?? '🌊',
     interests: p.interests ?? [],

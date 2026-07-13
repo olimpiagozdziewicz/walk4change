@@ -6,7 +6,7 @@ import { ScreenHeader, Card, PrimaryButton, SoftButton, Pill } from '../componen
 import { FootstepTrail } from '../components/Footsteps'
 import { Celebrate } from '../components/Celebrate'
 import { RealMap } from '../components/RealMap'
-import { apiRequest, hasBackend, getToken } from '../lib/http'
+import { apiRequest, hasBackend, getToken, ApiError } from '../lib/http'
 import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 import { useStepCounter } from '../hooks/useStepCounter'
@@ -49,6 +49,7 @@ export function Walk() {
 
   // auth
   const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [authTerms, setAuthTerms] = useState(false)
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [name, setName] = useState('')
@@ -156,9 +157,10 @@ export function Walk() {
 
   const doAuth = async () => {
     if (busy) return
+    if (mode === 'signup' && !authTerms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
     setBusy(true); setError(null)
     try {
-      if (mode === 'signup') await register(email.trim(), pass, name.trim() || email.split('@')[0])
+      if (mode === 'signup') await register(email.trim(), pass, name.trim() || email.split('@')[0], authTerms)
       else await login(email.trim(), pass)
       setPhase('idle')
     } catch {
@@ -239,7 +241,13 @@ export function Walk() {
       if (!res.data) throw new Error('no session')
       setSessionId(res.data.id); setJoinCode(res.data.join_code); setCodeInput('')
       connectAndStream(res.data.id)
-    } catch { setError('Nie udało się rozpocząć spaceru.') } finally { setBusy(false) }
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED'
+          ? 'Otwarte spacery wymagają potwierdzonego e-maila — wyślij link weryfikacyjny z Profilu (albo wyłącz „spaceruję — dołącz").'
+          : 'Nie udało się rozpocząć spaceru.',
+      )
+    } finally { setBusy(false) }
   }
 
   const joinWalk = async () => {
@@ -351,6 +359,12 @@ export function Walk() {
                 <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoCapitalize="none" className="mt-1 w-full rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-sm outline-none" placeholder="ty@email.pl" />
                 <label className="mt-3 block text-xs font-bold uppercase tracking-wide text-muted">Hasło</label>
                 <input value={pass} onChange={(e) => setPass(e.target.value)} type="password" className="mt-1 w-full rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-sm outline-none" placeholder="min. 8 znaków" />
+                {mode === 'signup' && (
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted">
+                    <input type="checkbox" checked={authTerms} onChange={(e) => setAuthTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]" />
+                    <span>Akceptuję <a href="/regulamin.html" target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
+                  </label>
+                )}
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
                 <PrimaryButton onClick={doAuth} className="mt-4 w-full"><SignIn size={18} /> {busy ? 'Chwila…' : mode === 'signup' ? 'Załóż konto' : 'Zaloguj się'}</PrimaryButton>
                 <button onClick={doMagic} disabled={busy} className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60">albo wyślij magiczny link →</button>

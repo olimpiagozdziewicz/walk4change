@@ -1,4 +1,4 @@
-import { apiRequest, hasBackend, setToken } from './http'
+import { API_BASE, apiRequest, getToken, hasBackend, setToken } from './http'
 
 const KEY = 'ss-auth'
 const UID_KEY = 'ss-uid'
@@ -50,16 +50,60 @@ export async function login(email: string, password: string): Promise<void> {
   setAuthed(true)
 }
 
-/** Rejestracja konta (POST /auth/register). */
-export async function register(email: string, password: string, displayName: string): Promise<void> {
+/** Rejestracja konta (POST /auth/register). Wymaga zgody na regulamin+politykę (RODO). */
+export async function register(
+  email: string,
+  password: string,
+  displayName: string,
+  acceptedTerms: boolean,
+): Promise<void> {
   const res = await apiRequest<{ id?: string }>('/auth/register', {
     method: 'POST',
     auth: false,
-    body: { email, password, display_name: displayName },
+    body: { email, password, display_name: displayName, accepted_terms: acceptedTerms },
   })
   if (res.token) setToken(res.token)
   if (res.data?.id) setCurrentUserId(res.data.id)
   setAuthed(true)
+}
+
+// ── Weryfikacja e-maila (spec 2026-07-13) ───────────────────────────────────
+
+/** Wyślij (ponownie) mail z linkiem weryfikacyjnym dla zalogowanego usera. */
+export async function requestEmailVerification(): Promise<void> {
+  await apiRequest('/auth/verify-email/request', { method: 'POST' })
+}
+
+/** Potwierdź e-mail tokenem z maila (nie loguje — tylko potwierdza skrzynkę). */
+export async function confirmEmailVerification(token: string): Promise<void> {
+  await apiRequest('/auth/verify-email/confirm', {
+    method: 'POST',
+    auth: false,
+    body: { token },
+  })
+}
+
+// ── RODO (spec 2026-07-13) ───────────────────────────────────────────────────
+
+/** Usuń konto (DELETE /me) i wyczyść stan lokalny. Nieodwracalne. */
+export async function deleteAccount(): Promise<void> {
+  await apiRequest('/me', { method: 'DELETE' })
+  setAuthed(false)
+}
+
+/** Pobierz pełny eksport danych (RODO art. 20) jako plik JSON. */
+export async function downloadMyData(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/me/export`, {
+    headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+  })
+  if (!res.ok) throw new Error('Eksport danych nie powiódł się. Spróbuj za chwilę.')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `seasteps-export-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /** Wylogowanie. Best-effort POST /auth/logout, potem czyści stan lokalny. */
@@ -100,10 +144,12 @@ export async function exchangeSupabaseSession(): Promise<boolean> {
   const accessToken = data.session?.access_token
   if (!accessToken) return false
 
+  // accepted_terms: klauzula zgody stoi pod formularzem magic-linka — backend
+  // zapisuje ją tylko, gdy wymiana TWORZY nowe konto (RODO, spec 2026-07-13).
   const res = await apiRequest<{ id?: string }>('/auth/supabase', {
     method: 'POST',
     auth: false,
-    body: { access_token: accessToken },
+    body: { access_token: accessToken, accepted_terms: true },
   })
   if (res.token) setToken(res.token)
   if (res.data?.id) setCurrentUserId(res.data.id)

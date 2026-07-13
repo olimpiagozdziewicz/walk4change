@@ -14,6 +14,7 @@ import { Eco } from './screens/Eco'
 import { History } from './screens/History'
 import { Partners } from './screens/Partners'
 import { MagicVerify } from './screens/MagicVerify'
+import { VerifyEmail } from './screens/VerifyEmail'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -48,6 +49,8 @@ function App() {
       {/* logowanie / zakładanie konta — pełny ekran, bez shellu */}
       <Route path="/login" element={<Login />} />
       <Route path="/auth/magic" element={<MagicVerify />} />
+      {/* potwierdzenie e-maila — publiczne (link można otworzyć na innym urządzeniu) */}
+      <Route path="/auth/verify-email" element={<VerifyEmail />} />
 
       {/* aplikacja — wymaga zalogowania */}
       <Route element={<RequireAuth />}>

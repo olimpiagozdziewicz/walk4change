@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit } from '@phosphor-icons/react'
+import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit, EnvelopeSimple, DownloadSimple, Trash, Warning } from '@phosphor-icons/react'
 import { Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { FootstepTrail } from '../components/Footsteps'
@@ -9,7 +9,7 @@ import { Avatar } from '../components/Avatar'
 import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward, type BlockedUser } from '../lib/api'
 import { getInterests, saveInterests } from '../lib/interests'
 import { getGender, saveGender, type Gender } from '../lib/settings'
-import { logout } from '../lib/auth'
+import { logout, requestEmailVerification, deleteAccount, downloadMyData } from '../lib/auth'
 
 export function Profile() {
   const nav = useNavigate()
@@ -28,6 +28,54 @@ export function Profile() {
   const [rewardTitles, setRewardTitles] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [verifyMsg, setVerifyMsg] = useState<string | null>(null)
+  const [verifySending, setVerifySending] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const sendVerifyMail = async () => {
+    if (verifySending) return
+    setVerifySending(true)
+    setVerifyMsg(null)
+    try {
+      await requestEmailVerification()
+      setVerifyMsg('✓ Link poszedł na Twoją skrzynkę (ważny 24 h).')
+    } catch {
+      setVerifyMsg('Nie udało się wysłać linku — spróbuj za minutę.')
+    } finally {
+      setVerifySending(false)
+    }
+  }
+
+  const exportData = async () => {
+    if (exporting) return
+    setExporting(true)
+    setExportMsg(null)
+    try {
+      await downloadMyData()
+    } catch {
+      setExportMsg('Eksport nie powiódł się — spróbuj za minutę.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (deleting || deleteInput.trim().toUpperCase() !== 'USUŃ') return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteAccount()
+      nav('/login')
+    } catch {
+      setDeleteError('Nie udało się usunąć konta — spróbuj ponownie.')
+      setDeleting(false)
+    }
+  }
 
   const pickGender = (g: Gender) => {
     setGender(g)
@@ -247,6 +295,36 @@ export function Profile() {
           )}
         </Card>
 
+        {/* weryfikacja e-maila (spec 2026-07-13) */}
+        {p.emailVerified ? (
+          <p className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-[#2f7a45]">
+            <Check size={13} weight="bold" /> {p.email} — e-mail potwierdzony
+          </p>
+        ) : (
+          <Card className="mt-4 p-4">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sand/25 text-[#c8761b]">
+                <EnvelopeSimple size={20} weight="fill" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-ink">Potwierdź swój e-mail</div>
+                <p className="mt-0.5 text-xs text-muted">
+                  {p.email} — potwierdzony e-mail odblokowuje otwarte spacery
+                  (dołączanie i wystawianie „spaceruję — dołącz").
+                </p>
+                <button
+                  onClick={sendVerifyMail}
+                  disabled={verifySending}
+                  className="mt-2.5 rounded-full bg-sea/10 px-3.5 py-1.5 text-xs font-bold text-deep transition active:scale-95 disabled:opacity-50"
+                >
+                  {verifySending ? 'Wysyłanie…' : 'Wyślij link weryfikacyjny'}
+                </button>
+                {verifyMsg && <p className="mt-1.5 text-xs font-semibold text-muted">{verifyMsg}</p>}
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* stats */}
         <div className="mt-4 grid grid-cols-3 gap-3">
           <StatCard icon={<Footprints size={22} />} value={p.stats.walks} label="spacerów" onClick={() => nav('/history')} />
@@ -347,6 +425,89 @@ export function Profile() {
           </>
         )}
 
+        {/* konto: RODO — eksport + usunięcie (spec 2026-07-13) */}
+        <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Twoje dane</h2>
+        <div className="space-y-2.5">
+          <Card className="flex items-center gap-3 p-3.5">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sea/10 text-sea">
+              <DownloadSimple size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-ink">Pobierz moje dane</div>
+              <div className="text-xs text-muted">Pełna kopia Twoich danych w pliku JSON (RODO).</div>
+              {exportMsg && <div className="mt-1 text-xs font-semibold text-rose-600">{exportMsg}</div>}
+            </div>
+            <button
+              type="button"
+              onClick={exportData}
+              disabled={exporting}
+              className="shrink-0 rounded-full bg-sea/10 px-3 py-1.5 text-xs font-bold text-deep transition active:scale-95 disabled:opacity-50"
+            >
+              {exporting ? 'Chwilka…' : 'Pobierz'}
+            </button>
+          </Card>
+
+          <Card className="flex items-center gap-3 p-3.5">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-red-50 text-rose-600">
+              <Trash size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-ink">Usuń konto</div>
+              <div className="text-xs text-muted">Nieodwracalne: trasy GPS, wiadomości i profil znikną.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setDeleteOpen(true); setDeleteInput(''); setDeleteError(null) }}
+              className="shrink-0 rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-rose-600 transition active:scale-95"
+            >
+              Usuń
+            </button>
+          </Card>
+        </div>
+
+        {/* modal potwierdzenia usunięcia konta */}
+        {deleteOpen && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-6" role="dialog" aria-modal="true">
+            <Card className="w-full max-w-sm p-5">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Warning size={20} weight="fill" />
+                <span className="font-display text-lg font-bold">Usunąć konto?</span>
+              </div>
+              <p className="mt-2 text-sm text-muted">
+                To jest nieodwracalne. Znikną: trasy GPS, wiadomości, znajomi, oceny
+                i profil. Wspólne spacery innych osób zostaną (bez Twoich danych).
+              </p>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wide text-muted">
+                Wpisz <span className="text-rose-600">USUŃ</span>, aby potwierdzić
+              </p>
+              <input
+                autoFocus
+                value={deleteInput}
+                onChange={(e) => setDeleteInput(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-rose-200 bg-white/80 px-3 py-2 text-sm font-bold text-ink outline-none focus:ring-2 focus:ring-rose-200"
+              />
+              {deleteError && <p className="mt-2 text-xs font-semibold text-rose-600">{deleteError}</p>}
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteOpen(false)}
+                  className="flex-1 rounded-2xl border border-white/70 bg-white/60 py-2.5 text-sm font-bold text-muted transition active:scale-[0.98]"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDelete}
+                  disabled={deleting || deleteInput.trim().toUpperCase() !== 'USUŃ'}
+                  className="flex-1 rounded-2xl bg-rose-600 py-2.5 text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
+                >
+                  {deleting ? 'Usuwanie…' : 'Usuń konto'}
+                </button>
+              </div>
+            </Card>
+          </div>
+        )}
+
         <button
           onClick={async () => {
             await logout()
@@ -358,6 +519,10 @@ export function Profile() {
         </button>
 
         <p className="mt-4 text-center text-xs text-muted">
+          <a href="/regulamin.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
+            Regulamin
+          </a>
+          {' · '}
           <a href="/privacy.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Polityka Prywatności
           </a>

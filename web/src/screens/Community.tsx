@@ -260,7 +260,12 @@ export function Community() {
       await api.joinOpenWalk(sessionId)
       navigate(`/walk?session=${sessionId}`)
     } catch (err) {
-      const msg = err instanceof ApiError && err.status === 409 ? 'Komplet uczestników' : 'Nie udało się dołączyć.'
+      const msg =
+        err instanceof ApiError && err.status === 409
+          ? 'Komplet uczestników'
+          : err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED'
+            ? 'Potwierdź e-mail w Profilu, aby dołączać do otwartych spacerów.'
+            : 'Nie udało się dołączyć.'
       setJoinErrors((e) => ({ ...e, [sessionId]: msg }))
     } finally {
       setJoiningId(null)
