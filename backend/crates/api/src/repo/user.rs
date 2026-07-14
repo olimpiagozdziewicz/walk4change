@@ -97,6 +97,23 @@ pub async fn get_profile(pool: &PgPool, id: Uuid) -> Result<Profile, AppError> {
     .ok_or(AppError::NotFound)
 }
 
+/// Record sign-up-terms consent for accounts that predate the consent flow
+/// (RODO tail, spec 2026-07-13). Login/magic/supabase forms display the
+/// acceptance clause, so a successful login counts as acceptance — but only
+/// when nothing was recorded yet (never overwrite an earlier consent/version).
+pub async fn record_terms_if_missing(pool: &PgPool, id: Uuid) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE users SET accepted_terms_at = now(), terms_version = $2 \
+         WHERE id = $1 AND accepted_terms_at IS NULL AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(TERMS_VERSION)
+    .execute(pool)
+    .await
+    .map_err(AppError::internal)?;
+    Ok(())
+}
+
 /// Mark the user's e-mail as verified (idempotent — keeps the first timestamp).
 pub async fn set_email_verified(pool: &PgPool, id: Uuid) -> Result<(), AppError> {
     sqlx::query(

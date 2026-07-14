@@ -412,6 +412,9 @@ export function Walk() {
                 <PrimaryButton onClick={doAuth} className="mt-4 w-full"><SignIn size={18} /> {busy ? 'Chwila…' : mode === 'signup' ? 'Załóż konto' : 'Zaloguj się'}</PrimaryButton>
                 <button onClick={doMagic} disabled={busy} className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60">albo wyślij magiczny link →</button>
                 {magicMsg && <p className="mt-2 text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
+                <p className="mt-2 text-center text-[11px] leading-snug text-muted">
+                  Logując się, akceptujesz <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
+                </p>
               </Card>
             </motion.div>
           )}

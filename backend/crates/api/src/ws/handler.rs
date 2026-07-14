@@ -117,9 +117,16 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
             // JWT TTL enforcement: close the socket once the token expires
             // instead of letting the connection outlive it (audit N2).
+            // Same tick also kills sockets of deleted accounts (RODO tail,
+            // spec 2026-07-13) — worst case the connection survives delete
+            // by one interval (30 s).
             _ = token_check.tick() => {
                 if chrono::Utc::now().timestamp() >= token_exp {
                     send_close_with_error(&mut sender, "token expired").await;
+                    break;
+                }
+                if crate::repo::user::is_deleted(&state.pool, actor).await.unwrap_or(false) {
+                    send_close_with_error(&mut sender, "account deleted").await;
                     break;
                 }
             }

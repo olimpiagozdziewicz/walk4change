@@ -171,7 +171,7 @@ export function Login() {
           </button>
           {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
           <p className="mt-3 text-center text-[11px] leading-snug text-muted">
-            Logując się magicznym linkiem, akceptujesz{' '}
+            Logując się, akceptujesz{' '}
             <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a>
             {' '}i{' '}
             <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.

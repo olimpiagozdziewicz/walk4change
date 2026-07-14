@@ -6,6 +6,33 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 
+/// Storage object paths (inside the `eco-photos` bucket) of every photo the
+/// user attached to eco reports. Collected BEFORE `delete_account` removes the
+/// rows, so the caller can best-effort purge the files afterwards (RODO tail).
+/// Public URL format: `…/storage/v1/object/public/eco-photos/<path>`.
+pub async fn eco_photo_paths(pool: &PgPool, user: Uuid) -> Result<Vec<String>, AppError> {
+    let rows: Vec<(Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT photo_url, photo_before_url, photo_after_url \
+         FROM eco_reports WHERE user_id = $1",
+    )
+    .bind(user)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::internal)?;
+
+    let marker = "/eco-photos/";
+    Ok(rows
+        .into_iter()
+        .flat_map(|(a, b, c)| [a, b, c])
+        .flatten()
+        .filter_map(|url| {
+            url.find(marker)
+                .map(|i| url[i + marker.len()..].to_string())
+                .filter(|p| !p.is_empty())
+        })
+        .collect())
+}
+
 /// Delete the user's account.
 ///
 /// Hard-deletes personal data (GPS pings, messages, tokens, blocks,

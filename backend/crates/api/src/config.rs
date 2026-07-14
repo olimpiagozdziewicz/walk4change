@@ -26,6 +26,9 @@ pub struct AppConfig {
     pub supabase_url: Option<String>,
     /// Supabase anon (public) key, used as the `apikey` when validating tokens.
     pub supabase_anon_key: Option<String>,
+    /// Supabase service-role key — ONLY for storage cleanup at account
+    /// deletion (RODO tail, spec 2026-07-13). Never sent to clients.
+    pub supabase_service_key: Option<String>,
 }
 
 /// SMTP configuration for sending magic-link emails.
@@ -143,6 +146,7 @@ impl AppConfig {
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.trim_end_matches('/').to_string());
         let supabase_anon_key = std::env::var("SUPABASE_ANON_KEY").ok().filter(|s| !s.trim().is_empty());
+        let supabase_service_key = std::env::var("SUPABASE_SERVICE_KEY").ok().filter(|s| !s.trim().is_empty());
 
         Ok(Self {
             database_url,
@@ -161,6 +165,7 @@ impl AppConfig {
             mail,
             supabase_url,
             supabase_anon_key,
+            supabase_service_key,
         })
     }
 
@@ -185,6 +190,7 @@ impl AppConfig {
             mail: None,
             supabase_url: None,
             supabase_anon_key: None,
+            supabase_service_key: None,
         }
     }
 }

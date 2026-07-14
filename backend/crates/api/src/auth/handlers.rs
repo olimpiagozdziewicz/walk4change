@@ -161,6 +161,9 @@ pub async fn login(
 
     match (valid, user_id) {
         (true, Some(id)) => {
+            // Konta sprzed flow zgód: formularz logowania wyświetla klauzulę
+            // akceptacji — odnotuj zgodę, jeśli jeszcze nie zapisana.
+            user_repo::record_terms_if_missing(&state.pool, id).await?;
             let token = jwt::encode(&state.config, id)?;
             Ok(Json(json!({ "token": token })))
         }
@@ -259,6 +262,7 @@ pub async fn magic_verify(
     let user_id = magic_repo::consume_token(&state.pool, body.token.trim()).await?;
     // Consuming a mailed one-time token proves mailbox ownership.
     user_repo::set_email_verified(&state.pool, user_id).await?;
+    user_repo::record_terms_if_missing(&state.pool, user_id).await?;
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
     Ok(Json(json!({ "token": token, "data": profile })))
@@ -377,6 +381,7 @@ pub async fn supabase_exchange(
 
     // Supabase already validated the mailbox via its own magic link.
     user_repo::set_email_verified(&state.pool, user_id).await?;
+    user_repo::record_terms_if_missing(&state.pool, user_id).await?;
 
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
