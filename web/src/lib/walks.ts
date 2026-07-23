@@ -65,7 +65,11 @@ export function getWalks(): SavedWalk[] {
 }
 
 export function addWalk(w: SavedWalk): SavedWalk[] {
-  const list = [w, ...getWalks()]
+  const existing = getWalks()
+  // Dedupe po sessionId — reentrancy guard w Walk.tsx powinien to wykluczyć,
+  // ale to tania, dodatkowa siatka przeciw duplikatom w historii.
+  if (existing.some((x) => x.id === w.id)) return existing
+  const list = [w, ...existing]
   try {
     localStorage.setItem(KEY, JSON.stringify(list))
   } catch {

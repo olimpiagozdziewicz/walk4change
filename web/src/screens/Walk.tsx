@@ -16,6 +16,13 @@ import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
 
+// WS reconnect-with-backoff: 1s/2s/4s/8s, potem trzyma 8s aż do skutku.
+const WS_RECONNECT_BASE_MS = 1000
+const WS_RECONNECT_MAX_MS = 8000
+
+const GPS_SEARCHING_NOTE = 'Szukam pozycji GPS… (zezwól na lokalizację)'
+const GPS_WEAK_SIGNAL_NOTE = 'Słaby sygnał GPS — szukam dokładniejszej pozycji…'
+
 type Phase = 'auth' | 'idle' | 'active' | 'summary'
 
 interface Walker {
@@ -80,6 +87,12 @@ export function Walk() {
   const watchRef = useRef<GeoWatch | null>(null)
   const [disclosureFor, setDisclosureFor] = useState<string | null>(null)
   const lastSentRef = useRef(0)
+  // WS reconnect-with-backoff: `closedByClientRef` różni celowe zamknięcie
+  // (stop/leave ekranu) od zerwania sieci — tylko wtedy odpalamy retry.
+  const closedByClientRef = useRef(false)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const [stopping, setStopping] = useState(false)
   const [summary, setSummary] = useState<{ points: number; meters: number; steps: number; together: boolean; nature: boolean } | null>(null)
   const { steps, permissionNeeded, requestPermission, addMeters, reset: resetSteps } = useStepCounter()
 
@@ -182,22 +195,59 @@ export function Walk() {
     } finally { setBusy(false) }
   }
 
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+  }
+
+  // Jedyny punkt wejścia do (re)połączenia WS — używa go zarówno pętla
+  // backoff, jak i handler visibilitychange, żeby nigdy nie powstały dwa
+  // równoległe sockety dla tej samej sesji.
+  const reconnectSocket = (id: string) => {
+    clearReconnectTimer()
+    if (closedByClientRef.current || socketRef.current) return
+    setError(null)
+    socketRef.current = makeSock(id)
+  }
+
+  const scheduleReconnect = (id: string) => {
+    if (closedByClientRef.current) return
+    clearReconnectTimer()
+    const delay = Math.min(WS_RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current, WS_RECONNECT_MAX_MS)
+    reconnectAttemptRef.current += 1
+    reconnectTimerRef.current = window.setTimeout(() => reconnectSocket(id), delay)
+  }
+
   const makeSock = (id: string) => {
     const sock = new LiveSocket({
-      onOpen: () => { sock.subscribeSession(id); sock.subscribeLeaderboard() },
+      // Reconnect (backoff) i powrót z tła współdzielą tę samą ścieżkę:
+      // po (ponownym) otwarciu zawsze auth + subscribe od nowa.
+      onOpen: () => { reconnectAttemptRef.current = 0; sock.subscribeSession(id); sock.subscribeLeaderboard() },
       onPingScored: onPing,
       onLeaderboard,
       onError: (m) => setError(m),
-      onClose: () => { socketRef.current = null },
+      onClose: () => {
+        // Stare, już zastąpione gniazdo (np. po ręcznym reconnect) nie może
+        // gubić referencji do aktualnego — porównujemy instancję.
+        if (socketRef.current !== sock) return
+        socketRef.current = null
+        scheduleReconnect(id)
+      },
     })
     sock.connect()
     return sock
   }
 
   const connectAndStream = (id: string) => {
+    closedByClientRef.current = false
+    reconnectAttemptRef.current = 0
+    clearReconnectTimer()
     socketRef.current?.close()
     walkersRef.current = new Map(); flush()
     seqRef.current = 0; setSec(0); setSummary(null); resetSteps(); setMyTrack([])
+    setStopping(false)
     socketRef.current = makeSock(id)
     startGps(id)
     setPhase('active')
@@ -219,13 +269,13 @@ export function Walk() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, searchParams])
 
-  // Re-connect WS when app returns to foreground mid-walk
+  // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
+  // z pętlą backoff powyżej — patrz reconnectSocket).
   useEffect(() => {
     if (phase !== 'active') return
     const onVisible = () => {
       if (document.visibilityState === 'visible' && !socketRef.current) {
-        setError(null)
-        socketRef.current = makeSock(sessionId)
+        reconnectSocket(sessionId)
       }
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -270,14 +320,18 @@ export function Walk() {
     // Google Play: prominent disclosure PRZED prośbą o uprawnienie lokalizacji
     // w tle (tylko apka natywna, jednorazowo). Po akceptacji wracamy tutaj.
     if (needsLocationDisclosure()) { setDisclosureFor(id); return }
-    setGpsNote('Szukam pozycji GPS… (zezwól na lokalizację)')
+    setGpsNote(GPS_SEARCHING_NOTE)
     watchRef.current = watchGeoPosition(
       (fix) => {
-        setGpsNote(null)
         const acc = fix.accuracy
         // Drop poor-fix readings client-side: a wide accuracy radius drifts
         // several metres while standing still and would mint phantom points.
-        if (typeof acc === 'number' && acc > 35) return
+        // Note tylko przy realnej zmianie tekstu — bez spamu na każdy zły fix.
+        if (typeof acc === 'number' && acc > 35) {
+          setGpsNote((prev) => (prev === GPS_WEAK_SIGNAL_NOTE ? prev : GPS_WEAK_SIGNAL_NOTE))
+          return
+        }
+        setGpsNote((prev) => (prev === null ? prev : null))
         const { lat, lng } = fix
         // Ślad na mapę live — niezależny od throttle'u wysyłki pingów poniżej,
         // bo tylko rysuje trasę i nie wpływa na punktację (tę liczy serwer).
@@ -295,12 +349,20 @@ export function Walk() {
   }
 
   const stopStreaming = () => {
+    // Zamknięcie z woli klienta (stop/leave ekranu) — pętla reconnect ma się
+    // odpuścić, nie próbować wskrzeszać sesji, którą sami kończymy.
+    closedByClientRef.current = true
+    clearReconnectTimer()
     watchRef.current?.stop(); watchRef.current = null
     socketRef.current?.close(); socketRef.current = null
     if (timer.current) window.clearInterval(timer.current)
   }
 
-  const stopWalk = async () => {
+  const stopWalk = () => {
+    // Guard przeciw wielokrotnym tapnięciom: bez tego dwa szybkie kliknięcia
+    // odpalają stop/leave i addWalk po dwa razy (duplikat w historii).
+    if (stopping) return
+    setStopping(true)
     const mine = me()
     const nat = mine?.nature ?? 1
     const tog = mine?.together ?? 1
@@ -324,9 +386,15 @@ export function Walk() {
       })
     }
     stopStreaming()
-    try { await apiRequest(`/walks/${sessionId}/stop`, { method: 'POST' }) } catch { /* non-host */ }
-    try { await apiRequest(`/walks/${sessionId}/leave`, { method: 'POST' }) } catch { /* ignore */ }
+    // Podsumowanie jest liczone lokalnie — pokazujemy je od razu, a stop/leave
+    // (nieistotne dla UI, każde już wcześniej best-effort) lecą w tle
+    // równolegle zamiast blokować przycisk do 2×15 s.
     setPhase('summary')
+    setStopping(false)
+    void Promise.allSettled([
+      apiRequest(`/walks/${sessionId}/stop`, { method: 'POST' }),
+      apiRequest(`/walks/${sessionId}/leave`, { method: 'POST' }),
+    ])
   }
 
   const copyCode = () => {
@@ -551,7 +619,13 @@ export function Walk() {
                 </Card>
               )}
 
-              <button onClick={stopWalk} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6b4b4] bg-white/80 py-4 text-base font-bold text-[#c0504d] transition active:scale-[0.97]"><Square size={18} weight="fill" color="#c0504d" /> Zakończ spacer</button>
+              <button
+                onClick={stopWalk}
+                disabled={stopping}
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6b4b4] bg-white/80 py-4 text-base font-bold text-[#c0504d] transition active:scale-[0.97] disabled:opacity-60"
+              >
+                <Square size={18} weight="fill" color="#c0504d" /> {stopping ? 'Kończę…' : 'Zakończ spacer'}
+              </button>
             </motion.div>
           )}
 
