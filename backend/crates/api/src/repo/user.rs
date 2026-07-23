@@ -163,7 +163,7 @@ pub async fn search(pool: &PgPool, q: &str, exclude: Uuid) -> Result<Vec<UserSea
     sqlx::query_as::<_, UserSearchItem>(
         "SELECT id, display_name, avatar_url \
          FROM users \
-         WHERE display_name ILIKE $1 AND id <> $2 \
+         WHERE display_name ILIKE $1 AND id <> $2 AND deleted_at IS NULL \
          ORDER BY display_name \
          LIMIT 10",
     )

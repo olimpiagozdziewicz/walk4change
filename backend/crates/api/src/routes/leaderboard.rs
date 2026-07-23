@@ -41,6 +41,7 @@ pub async fn top_n(pool: &PgPool, n: i64) -> Result<Vec<LeaderboardEntry>, AppEr
         "SELECT ut.user_id, u.display_name, ut.total_points \
          FROM user_totals ut \
          JOIN users u ON u.id = ut.user_id \
+         WHERE u.deleted_at IS NULL \
          ORDER BY ut.total_points DESC, u.display_name ASC, u.id ASC \
          LIMIT $1",
     )
@@ -52,8 +53,12 @@ pub async fn top_n(pool: &PgPool, n: i64) -> Result<Vec<LeaderboardEntry>, AppEr
 
 /// Total number of rows in `user_totals` (for pagination).
 async fn count_leaderboard(pool: &PgPool) -> Result<i64, AppError> {
-    sqlx::query_scalar("SELECT COUNT(*) FROM user_totals")
-        .fetch_one(pool)
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM user_totals ut \
+         JOIN users u ON u.id = ut.user_id \
+         WHERE u.deleted_at IS NULL",
+    )
+    .fetch_one(pool)
         .await
         .map_err(AppError::internal)
 }
@@ -67,6 +72,7 @@ async fn list_leaderboard(
         "SELECT ut.user_id, u.display_name, ut.total_points \
          FROM user_totals ut \
          JOIN users u ON u.id = ut.user_id \
+         WHERE u.deleted_at IS NULL \
          ORDER BY ut.total_points DESC, u.display_name ASC, u.id ASC \
          LIMIT $1 OFFSET $2",
     )
