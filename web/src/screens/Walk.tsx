@@ -40,6 +40,8 @@ interface Walker {
 interface WalkSession {
   id: string
   join_code: string | null
+  /** obecne tylko w odpowiedzi POST /walks (host) — join-by-code go nie zwraca */
+  started_at?: string
 }
 
 function fmt(sec: number) {
@@ -54,6 +56,14 @@ export function Walk() {
   const [sec, setSec] = useState(0)
   const timer = useRef<number | null>(null)
   const joinedViaQueryRef = useRef(false)
+  // Wall-clock anchor dla licznika czasu spaceru (epoch ms). Mobilne
+  // przeglądarki throttlują/pauzują setInterval przy zgaszonym ekranie —
+  // licząc `sec` z różnicy Date.now() - startedAt (zamiast +1 na tick),
+  // licznik nigdy nie traci czasu, nawet gdy tiki zostaną pominięte.
+  // Preferujemy autorytatywny `started_at` z backendu (walk_sessions),
+  // gdy dotrze; do tego czasu Date.now() z momentu (re)connectu jest
+  // wystarczającym tymczasowym zastępstwem.
+  const startedAtRef = useRef<number | null>(null)
 
   // auth
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -103,7 +113,21 @@ export function Walk() {
 
   useEffect(() => {
     if (phase !== 'active' || !sessionId) return
-    const load = () => { api.getWalkDetail(sessionId).then(setWalkDetail).catch(() => {}) }
+    const load = () => {
+      api.getWalkDetail(sessionId).then((d) => {
+        setWalkDetail(d)
+        // Serwer jest autorytatywnym źródłem started_at — nadpisujemy
+        // tymczasowy Date.now() z (re)connectu, gdy dotrze (pierwszy load
+        // leci natychmiast, więc zwykle w ułamku sekundy od startu).
+        if (d.startedAt) {
+          const serverStart = Date.parse(d.startedAt)
+          if (!Number.isNaN(serverStart) && serverStart !== startedAtRef.current) {
+            startedAtRef.current = serverStart
+            setSec(Math.max(0, Math.floor((Date.now() - serverStart) / 1000)))
+          }
+        }
+      }).catch(() => {})
+    }
     load()
     const id = window.setInterval(load, 15000)
     return () => window.clearInterval(id)
@@ -128,9 +152,17 @@ export function Walk() {
   }
 
   useEffect(() => {
-    if (phase === 'active') {
-      timer.current = window.setInterval(() => setSec((s) => s + 1), 1000)
+    if (phase !== 'active') return
+    // Licznik czyta zegar (Date.now() - startedAt), nie zlicza ticków —
+    // throttlowany/pauzowany setInterval (ekran zgaszony, apka w tle) może
+    // zgubić dowolną liczbę ticków bez gubienia realnego czasu spaceru.
+    const tick = () => {
+      if (startedAtRef.current != null) {
+        setSec(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
+      }
     }
+    tick()
+    timer.current = window.setInterval(tick, 1000)
     return () => { if (timer.current) window.clearInterval(timer.current) }
   }, [phase])
 
@@ -240,7 +272,7 @@ export function Walk() {
     return sock
   }
 
-  const connectAndStream = (id: string) => {
+  const connectAndStream = (id: string, startedAtIso?: string) => {
     closedByClientRef.current = false
     reconnectAttemptRef.current = 0
     clearReconnectTimer()
@@ -248,6 +280,14 @@ export function Walk() {
     walkersRef.current = new Map(); flush()
     seqRef.current = 0; setSec(0); setSummary(null); resetSteps(); setMyTrack([])
     setStopping(false)
+    // Nowa sesja spaceru — ustawiane raz, tu, nie w efekcie na każdy render,
+    // żeby przetrwać re-rendery (patrz komentarz przy deklaracji ref).
+    // startedAtIso (POST /walks dla hosta) jest autorytatywny od razu; gdy
+    // go nie ma (join-by-code, deep link), Date.now() to tymczasowy
+    // zastępca — walkDetail-polling effect nadpisze go server-side wartością
+    // przy pierwszym pobraniu (leci natychmiast po aktywacji).
+    const parsedStart = startedAtIso ? Date.parse(startedAtIso) : NaN
+    startedAtRef.current = Number.isNaN(parsedStart) ? Date.now() : parsedStart
     socketRef.current = makeSock(id)
     startGps(id)
     setPhase('active')
@@ -274,9 +314,14 @@ export function Walk() {
   useEffect(() => {
     if (phase !== 'active') return
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && !socketRef.current) {
-        reconnectSocket(sessionId)
+      if (document.visibilityState !== 'visible') return
+      // Zgaszony ekran throttluje/pauzuje nasz interval (patrz timer effect
+      // powyżej) — po powrocie snapujemy licznik natychmiast z zegara,
+      // zamiast czekać do 1s na kolejny tick.
+      if (startedAtRef.current != null) {
+        setSec(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
       }
+      if (!socketRef.current) reconnectSocket(sessionId)
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -292,7 +337,7 @@ export function Walk() {
       })
       if (!res.data) throw new Error('no session')
       setSessionId(res.data.id); setJoinCode(res.data.join_code); setCodeInput('')
-      connectAndStream(res.data.id)
+      connectAndStream(res.data.id, res.data.started_at)
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED'
@@ -367,6 +412,12 @@ export function Walk() {
     const nat = mine?.nature ?? 1
     const tog = mine?.together ?? 1
     const finalPoints = Math.round(mine?.points ?? 0)
+    // Zegar, nie licznik `sec` z ostatniego ticku — przy stopie tuż po
+    // powrocie z tła (przed kolejnym tickiem interwału) `sec` mógłby być
+    // chwilę nieaktualny; podsumowanie i historia mają liczyć się identycznie
+    // jak licznik na ekranie, więc liczymy wprost z tego samego źródła prawdy.
+    const finalSec = startedAtRef.current != null ? Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)) : sec
+    setSec(finalSec) // ekran podsumowania (fmt(sec)) ma pokazać dokładnie to, co zapisujemy
     setSummary({ points: finalPoints, meters: mine?.meters ?? 0, steps, together: tog > 1, nature: nat > 1 })
     if (sessionId) {
       const now = new Date()
@@ -375,7 +426,7 @@ export function Walk() {
       addWalk({
         id: sessionId || `w-${Date.now()}`,
         dateLabel: `Dziś • ${hh}:${mm}`,
-        durationSec: sec,
+        durationSec: finalSec,
         steps,
         points: finalPoints,
         withSomeone: walkers.length > 1,

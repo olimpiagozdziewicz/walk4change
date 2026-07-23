@@ -797,18 +797,22 @@ export interface WalkParticipant {
 export interface WalkDetailInfo {
   hostId: string
   status: string
+  /** ISO timestamp z serwera (`walk_sessions.started_at`) — źródło prawdy dla
+   *  licznika czasu; działa niezależnie od throttlowanych timerów w tle. */
+  startedAt: string | null
   participants: WalkParticipant[]
 }
 
 async function fetchWalkDetail(sessionId: string): Promise<WalkDetailInfo> {
   const res = await apiRequest<{
-    session: { host_id: string; status: string }
+    session: { host_id: string; status: string; started_at: string }
     participants: { user_id: string; display_name: string; left_at: string | null }[]
   }>(`/walks/${sessionId}`)
   const d = res.data
   return {
     hostId: d?.session.host_id ?? '',
     status: d?.session.status ?? '',
+    startedAt: d?.session.started_at ?? null,
     participants: (d?.participants ?? []).map((p) => ({
       userId: p.user_id,
       name: p.display_name,
