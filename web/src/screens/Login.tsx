@@ -6,7 +6,7 @@ import { Envelope, Lock, ArrowRight, Footprints, Leaf, UsersThree, Warning, Down
 import { Logo } from '../components/Logo'
 import { FootstepTrail } from '../components/Footsteps'
 import { showInstallModal } from '../components/InstallModal'
-import { login, register, requestMagicLink } from '../lib/auth'
+import { login, register, requestMagicLink, verifyMagicCode } from '../lib/auth'
 
 type Tab = 'login' | 'signup'
 
@@ -26,6 +26,8 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [magicMsg, setMagicMsg] = useState<string | null>(null)
   const [terms, setTerms] = useState(false)
+  const [magicSent, setMagicSent] = useState(false)
+  const [code, setCode] = useState('')
 
   const submit = async () => {
     setError(null)
@@ -57,8 +59,24 @@ export function Login() {
     try {
       await requestMagicLink(email)
       setMagicMsg(`✓ Sprawdź skrzynkę — magiczny link poszedł na ${email.trim()}.`)
+      setMagicSent(true)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Nie udało się wysłać magicznego linku.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submitCode = async () => {
+    if (loading) return
+    if (!/^\d{8}$/.test(code.replace(/\s+/g, ''))) { setError('Kod ma 8 cyfr.'); return }
+    setError(null)
+    setLoading(true)
+    try {
+      await verifyMagicCode(email, code)
+      nav('/')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Nie udało się zalogować kodem.')
     } finally {
       setLoading(false)
     }
@@ -175,6 +193,33 @@ export function Login() {
             albo wyślij magiczny link →
           </button>
           {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
+          {magicSent && (
+            <div className="mt-3">
+              <label htmlFor="magic-code" className="mb-1 block text-center text-xs font-semibold text-muted">
+                Wpisz 8-cyfrowy kod z maila
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="magic-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/[^\d\s]/g, '').slice(0, 9))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={9}
+                  placeholder="00000000"
+                  className="min-w-0 flex-1 rounded-2xl border border-sea/20 bg-white px-4 py-3 text-center text-lg font-bold tracking-widest text-ink outline-none focus:border-sea"
+                />
+                <button
+                  type="button"
+                  onClick={submitCode}
+                  disabled={loading}
+                  className="shrink-0 rounded-2xl bg-sea px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  Zaloguj kodem
+                </button>
+              </div>
+            </div>
+          )}
           {/* apka natywna: bez instalacji PWA (spec 2026-10-01) */}
           {!IS_NATIVE && (
             <button

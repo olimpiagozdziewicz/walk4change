@@ -151,6 +151,25 @@ export async function requestMagicLink(email: string): Promise<void> {
 }
 
 /**
+ * Logowanie 8-cyfrowym kodem z maila (spec 2026-10-01) — niezawodna droga obok linku.
+ * verifyOtp zapisuje sesję Supabase, potem ta sama wymiana co po kliknięciu linku.
+ */
+export async function verifyMagicCode(email: string, code: string): Promise<void> {
+  const { supabase } = await import('./supabase')
+  const token = code.replace(/\s+/g, '')
+  const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' })
+  if (error) {
+    const msg = (error.message || '').toLowerCase()
+    throw new Error(
+      msg.includes('expired') || msg.includes('invalid')
+        ? 'Kod jest nieprawidłowy albo wygasł. Sprawdź cyfry lub wyślij nowy link.'
+        : 'Nie udało się zweryfikować kodu. Spróbuj ponownie.',
+    )
+  }
+  if (!(await exchangeSupabaseSession())) throw new Error('Nie udało się zalogować kodem. Spróbuj ponownie.')
+}
+
+/**
  * After a Supabase magic-link redirect, exchange the Supabase session for the
  * backend JWT. Returns true on success. Clears the Supabase session afterwards.
  */
