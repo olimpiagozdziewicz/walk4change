@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon.svg" />
+<meta name="theme-color" content="#0f8b8d" />
+<meta name="description" content="Jak usunąć konto SeaSteps i jakie dane są wtedy usuwane." />
+<link rel="canonical" href="https://seasteps.pl/usun-konto.html" />
+<title>Usuwanie konta · SeaSteps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef7f8; --ink:#14343a; --muted:#5d7c81;
+    --sea:#0f8b8d; --deep:#0c5a71;
+    --display:'Outfit',sans-serif; --body:'Manrope',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--body); color:var(--ink); line-height:1.65;
+    background:
+      radial-gradient(circle at 12% -4%, rgba(88,184,108,.16), transparent 26%),
+      radial-gradient(circle at 100% 0%, rgba(15,139,141,.22), transparent 30%),
+      linear-gradient(180deg,#f8fcfd 0%,#e7f4f5 100%);
+    min-height:100vh;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:32px 24px 80px;}
+  a{color:var(--sea); text-decoration:none; font-weight:700;}
+  a:hover{text-decoration:underline;}
+  .back{display:inline-flex; align-items:center; gap:6px; font-size:14px; margin-bottom:28px; color:var(--deep);}
+  .card{background:rgba(255,255,255,.82); border:1px solid rgba(255,255,255,.7); backdrop-filter:blur(14px); border-radius:26px; padding:32px 28px;}
+  h1{font-family:var(--display); letter-spacing:-.03em; font-size:30px; margin:0 0 4px; color:var(--deep);}
+  h2{font-family:var(--display); letter-spacing:-.02em; font-size:19px; margin:30px 0 8px; color:var(--ink);}
+  .date{color:var(--muted); font-size:14px; margin:0 0 18px; font-weight:600;}
+  p{margin:0 0 12px;}
+  ul{margin:0 0 12px; padding-left:22px;}
+  li{margin:4px 0;}
+  .muted{color:var(--muted); font-size:14px;}
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid rgba(93,124,129,.18); vertical-align:top;}
+  th{color:var(--deep); font-family:var(--display);}
+  @media(max-width:560px){ .card{padding:24px 18px;} h1{font-size:25px;} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/">◂ Wróć do SeaSteps</a>
+    <div class="card">
+      <h1>Usuwanie konta SeaSteps</h1>
+      <p class="date">Aplikacja SeaSteps (pl.seasteps.app) i serwis seasteps.pl</p>
+
+      <p>Możesz w każdej chwili usunąć swoje konto SeaSteps wraz z danymi osobowymi.
+      Wybierz jedną z dwóch dróg.</p>
+
+      <h2>1. Z poziomu aplikacji (najszybciej)</h2>
+      <ol>
+        <li>Zaloguj się do aplikacji SeaSteps (Android lub przeglądarka).</li>
+        <li>Wejdź w <strong>Profil → Twoje dane → „Usuń konto"</strong>.</li>
+        <li>Potwierdź operację. Jest nieodwracalna i wykonywana natychmiast.</li>
+      </ol>
+
+      <h2>2. Bez dostępu do aplikacji</h2>
+      <p>Jeśli nie możesz się zalogować albo odinstalowałeś(-aś) aplikację, napisz z adresu
+      e-mail przypisanego do konta na
+      <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a> z prośbą o usunięcie konta.
+      Weryfikujemy, że wiadomość przyszła z adresu konta, i usuwamy je niezwłocznie,
+      nie później niż w ciągu 30 dni od otrzymania prośby.</p>
+
+      <h2>Jakie dane usuwamy</h2>
+      <ul>
+        <li>dane konta i profil: e-mail, nazwa wyświetlana, avatar, opis, zainteresowania (profil jest anonimizowany);</li>
+        <li>trasy GPS i historia spacerów;</li>
+        <li>wiadomości, znajomości, oceny i blokady;</li>
+        <li>eko-zgłoszenia wraz ze zdjęciami (pliki w magazynie zdjęć czyścimy niezwłocznie, nie później niż w ciągu 30 dni).</li>
+      </ul>
+
+      <h2>Co może zostać</h2>
+      <ul>
+        <li>wpisy o wspólnych spacerach w danych pozostałych uczestników — w formie zanonimizowanej („Konto usunięte"), bez Twojej trasy GPS;</li>
+        <li>zapisy wymian punktów na nagrody — do 6 lat (rozliczenia z partnerami);</li>
+        <li>logi techniczne — krótkoterminowo, w cyklu rotacji logów.</li>
+      </ul>
+
+      <p>Przed usunięciem możesz pobrać kopię swoich danych: Profil → Twoje dane → „Pobierz".</p>
+
+      <p class="muted">Szczegóły: <a href="/privacy.html">Polityka Prywatności</a>.
+      Kontakt: <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a></p>
+    </div>
+  </div>
+</body>
+</html>
