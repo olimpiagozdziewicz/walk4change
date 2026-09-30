@@ -22,6 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App Links: magic link (spec 2026-10-01); tylko ten path, nie cały /app/ -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="seasteps.pl" android:pathPrefix="/app/auth/magic" />
+            </intent-filter>
+
         </activity>
 
         <provider

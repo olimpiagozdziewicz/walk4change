@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+import { SITE_ORIGIN } from './site'
 import { API_BASE, apiRequest, getToken, hasBackend, setToken } from './http'
 
 const KEY = 'ss-auth'
@@ -137,7 +139,10 @@ export async function logout(): Promise<void> {
 /** Send a Supabase magic-link email. Link returns to /auth/magic. */
 export async function requestMagicLink(email: string): Promise<void> {
   const { supabase } = await import('./supabase')
-  const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}auth/magic`
+  // natywna apka: App Link na stronę (https://seasteps.pl/app/auth/magic) przechwytywany przez apkę
+  const redirectTo = Capacitor.isNativePlatform()
+    ? `${SITE_ORIGIN}/app/auth/magic`
+    : `${window.location.origin}${import.meta.env.BASE_URL}auth/magic`
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim(),
     options: { emailRedirectTo: redirectTo },

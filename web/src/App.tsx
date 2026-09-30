@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
-import { Routes, Route, Outlet, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom'
+import { initAppLinks } from './lib/appLinks'
 import { isAuthed, setAuthed } from './lib/auth'
 import { getToken } from './lib/http'
 import { AppShell } from './components/AppShell'
@@ -44,6 +45,8 @@ function AppLayout() {
 }
 
 function App() {
+  const navigate = useNavigate()
+  useEffect(() => initAppLinks((to) => navigate(to)), [navigate])
   return (
     <>
     <ScrollToTop />
