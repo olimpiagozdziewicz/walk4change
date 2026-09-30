@@ -83,6 +83,19 @@ przegląd Google (zwykle 1–7 dni) → publiczna publikacja.
 - Backend CORS ma już `https://localhost` (origin natywnej apki) — env
   `CORS_ALLOWED_ORIGINS` na Azure.
 
+## App Links (magic link w apce) — odcisk App signing key
+
+Magic link otwiera się w apce dzięki App Links (`autoVerify`, path `/app/auth/magic`)
+i plikowi `.well-known/assetlinks.json` na seasteps.pl (kopiowany w `build-site.sh`).
+Plik zawiera odcisk SHA-256 klucza **upload** (wypisuje go CI, artefakt `assetlinks`).
+
+**Po utworzeniu apki w Play Console (App signing) trzeba dopisać DRUGI odcisk** —
+„App signing key certificate" z Konsoli (Konfiguracja → Integralność aplikacji →
+Podpisywanie aplikacji) — do tablicy `sha256_cert_fingerprints` w `assetlinks.json`
+i wdrożyć stronę. Sklep podpisuje instalacje kluczem Google, więc bez tego
+odcisku App Links NIE zweryfikują się na zainstalowanej z Play apce (link otworzy się
+w przeglądarce). Weryfikacja: `adb shell pm get-app-links pl.seasteps.app`.
+
 ## Czego w tej wersji celowo NIE ma (następne iteracje)
 
 - Powiadomienia push (FCM), Play Integrity API.

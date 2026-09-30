@@ -48,6 +48,19 @@ jobs:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
 
+      - name: Upload key SHA-256 fingerprint (public) for assetlinks.json
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          # odcisk certyfikatu jest publiczny; do logu trafiaja wylacznie linie SHA256:
+          FP=$(keytool -list -v -alias upload -keystore "$RUNNER_TEMP/upload-keystore.p12" -storetype PKCS12 -storepass "$KEYSTORE_PASS" 2>/dev/null | grep -E '^\s*SHA256:' | head -1 | sed -E 's/^\s*SHA256:\s*//')
+          echo "Upload key SHA256: $FP"
+          test -n "$FP"
+          cat > assetlinks.json <<JSON
+          [{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"pl.seasteps.app","sha256_cert_fingerprints":["$FP"]}}]
+          JSON
+          sed -i 's/^ *//' assetlinks.json
+
       - name: Gradle bundleRelease (signed)
         working-directory: web/android
         env:
@@ -81,4 +94,10 @@ jobs:
         with:
           name: SeaSteps-aab
           path: SeaSteps.aab
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assetlinks
+          path: assetlinks.json
           retention-days: 30

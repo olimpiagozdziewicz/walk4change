@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { siteUrl } from '../lib/site'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { Play, Square, UsersThree, Leaf, Trophy, Footprints, MapPin, SignIn, Copy, CheckCircle, HandHeart, ThumbsUp, ThumbsDown } from '@phosphor-icons/react'
@@ -573,7 +574,7 @@ export function Walk() {
               także przy zgaszonym ekranie (zobaczysz powiadomienie systemowe) — żeby liczyć
               trasę, punkty i pokazywać Cię uczestnikom tej samej sesji. Poza spacerem
               lokalizacja nie jest zbierana. Szczegóły w{' '}
-              <a href="https://seasteps.pl/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
+              <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -618,7 +619,7 @@ export function Walk() {
                 {mode === 'signup' && (
                   <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted">
                     <input type="checkbox" checked={authTerms} onChange={(e) => setAuthTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]" />
-                    <span>Akceptuję <a href="/regulamin.html" target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
+                    <span>Akceptuję <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
                   </label>
                 )}
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
@@ -626,7 +627,7 @@ export function Walk() {
                 <button onClick={doMagic} disabled={busy} className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60">albo wyślij magiczny link →</button>
                 {magicMsg && <p className="mt-2 text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
                 <p className="mt-2 text-center text-[11px] leading-snug text-muted">
-                  Logując się, akceptujesz <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
+                  Logując się, akceptujesz <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
                 </p>
               </Card>
             </motion.div>

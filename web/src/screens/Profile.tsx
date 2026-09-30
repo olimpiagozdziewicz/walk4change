@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { siteUrl } from '../lib/site'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { motion } from 'motion/react'
@@ -479,6 +480,7 @@ export function Profile() {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-bold text-ink">Usuń konto</div>
               <div className="text-xs text-muted">Nieodwracalne: trasy GPS, wiadomości i profil znikną.</div>
+              <a href={siteUrl('/usun-konto.html')} target="_blank" rel="noopener" className="text-xs font-bold text-sea underline">Jak usunąć konto</a>
             </div>
             <button
               type="button"
@@ -544,11 +546,11 @@ export function Profile() {
         </button>
 
         <p className="mt-4 text-center text-xs text-muted">
-          <a href="/regulamin.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
+          <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Regulamin
           </a>
           {' · '}
-          <a href="/privacy.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
+          <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Polityka Prywatności
           </a>
         </p>
