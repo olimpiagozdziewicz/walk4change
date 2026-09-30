@@ -55,6 +55,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew bundleRelease \
+            -PversionCode=${{ github.run_number }} \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload-keystore.p12" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASS" \
             -Pandroid.injected.signing.key.alias=upload \
@@ -62,6 +63,19 @@ jobs:
 
       - name: Rename artifact
         run: cp web/android/app/build/outputs/bundle/release/app-release.aab SeaSteps.aab
+
+      - name: Dump merged manifest (targetSdk, permissions)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" \
+            https://github.com/google/bundletool/releases/download/1.18.1/bundletool-all-1.18.1.jar
+          java -jar "$RUNNER_TEMP/bundletool.jar" dump manifest --bundle SeaSteps.aab > "$RUNNER_TEMP/manifest.xml"
+          echo "=== versionCode / versionName / targetSdk / minSdk ==="
+          grep -E 'versionCode|versionName|targetSdkVersion|minSdkVersion|allowBackup' "$RUNNER_TEMP/manifest.xml" || true
+          echo "=== uses-permission ==="
+          grep -E 'uses-permission' -A0 "$RUNNER_TEMP/manifest.xml" | sed 's/^ *//' || true
+          if grep -q 'ACCESS_BACKGROUND_LOCATION' "$RUNNER_TEMP/manifest.xml"; then
+            echo "::error::ACCESS_BACKGROUND_LOCATION w manifescie AAB"; exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

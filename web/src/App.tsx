@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { Routes, Route, Outlet, useLocation, Navigate } from 'react-router-dom'
 import { isAuthed, setAuthed } from './lib/auth'
 import { getToken } from './lib/http'
@@ -69,7 +70,7 @@ function App() {
       </Route>
       </Route>
     </Routes>
-    <InstallModal />
+    {!Capacitor.isNativePlatform() && <InstallModal />}
     </>
   )
 }

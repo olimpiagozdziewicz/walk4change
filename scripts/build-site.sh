@@ -14,7 +14,7 @@ echo "==> building web app (base=/app/)"
 
 echo "==> assembling combined site at $OUT"
 rm -rf "$OUT"; mkdir -p "$OUT/app"
-cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/regulamin.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" \
+cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/regulamin.html" "$ROOT/usun-konto.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" \
    "$ROOT/robots.txt" "$ROOT/sitemap.xml" "$ROOT/llms.txt" "$ROOT/favicon-192.png" "$ROOT/favicon.ico" "$OUT/"
 # plik klucza IndexNow - nazwa pliku JEST kluczem (32 znaki hex), wiec bierzemy go globem,
 # zeby rotacja klucza nie wymagala edycji tego skryptu. Rejestr: scripts/indexnow-domeny.json

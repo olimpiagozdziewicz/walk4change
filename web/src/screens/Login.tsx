@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { useNavigate } from 'react-router-dom'
 import { Envelope, Lock, ArrowRight, Footprints, Leaf, UsersThree, Warning, DownloadSimple } from '@phosphor-icons/react'
 import { Logo } from '../components/Logo'
@@ -7,6 +8,8 @@ import { showInstallModal } from '../components/InstallModal'
 import { login, register, requestMagicLink } from '../lib/auth'
 
 type Tab = 'login' | 'signup'
+
+const IS_NATIVE = Capacitor.isNativePlatform()
 
 export function Login() {
   const nav = useNavigate()
@@ -163,21 +166,26 @@ export function Login() {
             {loading ? 'Chwilka…' : tab === 'login' ? 'Zaloguj się' : 'Załóż konto'} {!loading && <ArrowRight size={18} />}
           </button>
 
-          <button
-            onClick={sendMagicLink}
-            disabled={loading}
-            className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60"
-          >
-            albo wyślij magiczny link →
-          </button>
-          {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
-          <button
-            type="button"
-            onClick={showInstallModal}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-sea/20 bg-sea/8 py-3 text-sm font-bold text-deep transition active:scale-[0.98]"
-          >
-            <DownloadSimple size={16} /> Zainstaluj aplikację na telefonie
-          </button>
+          {/* apka natywna: tylko hasło, bez magic linku i instalacji PWA (spec 2026-10-01) */}
+          {!IS_NATIVE && (
+            <>
+              <button
+                onClick={sendMagicLink}
+                disabled={loading}
+                className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60"
+              >
+                albo wyślij magiczny link →
+              </button>
+              {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
+              <button
+                type="button"
+                onClick={showInstallModal}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-sea/20 bg-sea/8 py-3 text-sm font-bold text-deep transition active:scale-[0.98]"
+              >
+                <DownloadSimple size={16} /> Zainstaluj aplikację na telefonie
+              </button>
+            </>
+          )}
           <p className="mt-3 text-center text-[11px] leading-snug text-muted">
             Logując się, akceptujesz{' '}
             <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a>

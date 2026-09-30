@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -22,7 +23,8 @@ createRoot(document.getElementById('root')!).render(
 )
 
 // PWA — rejestracja service workera (instalowalność + offline)
-if ('serviceWorker' in navigator) {
+// W apce natywnej (Capacitor) bundle jest lokalny — SW niepotrzebny (spec 2026-10-01).
+if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {})
   })
