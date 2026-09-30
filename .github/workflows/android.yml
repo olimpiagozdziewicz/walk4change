@@ -94,7 +94,9 @@ jobs:
         env:
           KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
-          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks             --bundle=SeaSteps.aab --output="$RUNNER_TEMP/app.apks" --mode=universal             --ks="$RUNNER_TEMP/upload-keystore.p12" --ks-pass=env:KEYSTORE_PASS             --ks-key-alias=upload --key-pass=env:KEYSTORE_PASS
+          printf '%s' "$KEYSTORE_PASS" > "$RUNNER_TEMP/ks.pass"
+          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks             --bundle=SeaSteps.aab --output="$RUNNER_TEMP/app.apks" --mode=universal             --ks="$RUNNER_TEMP/upload-keystore.p12" --ks-pass=file:"$RUNNER_TEMP/ks.pass"             --ks-key-alias=upload --key-pass=file:"$RUNNER_TEMP/ks.pass"
+          rm -f "$RUNNER_TEMP/ks.pass"
           unzip -o -q "$RUNNER_TEMP/app.apks" universal.apk -d "$RUNNER_TEMP/apk"
           cp "$RUNNER_TEMP/apk/universal.apk" SeaSteps.apk
           ls -l SeaSteps.apk
