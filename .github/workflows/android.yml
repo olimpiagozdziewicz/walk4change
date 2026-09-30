@@ -90,6 +90,21 @@ jobs:
             echo "::error::ACCESS_BACKGROUND_LOCATION w manifescie AAB"; exit 1
           fi
 
+      - name: Build universal APK (signed with upload key)
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks             --bundle=SeaSteps.aab --output="$RUNNER_TEMP/app.apks" --mode=universal             --ks="$RUNNER_TEMP/upload-keystore.p12" --ks-pass=env:KEYSTORE_PASS             --ks-key-alias=upload --key-pass=env:KEYSTORE_PASS
+          unzip -o -q "$RUNNER_TEMP/app.apks" universal.apk -d "$RUNNER_TEMP/apk"
+          cp "$RUNNER_TEMP/apk/universal.apk" SeaSteps.apk
+          ls -l SeaSteps.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SeaSteps-apk
+          path: SeaSteps.apk
+          retention-days: 30
+
       - uses: actions/upload-artifact@v4
         with:
           name: SeaSteps-aab
