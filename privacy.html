@@ -74,7 +74,7 @@
         <tr><td>Wiadomości 1:1 ze znajomymi</td>
             <td>czat w aplikacji</td>
             <td>art. 6 ust. 1 lit. b RODO</td></tr>
-        <tr><td>Oceny po spacerze (polecam/nie polecam, opcjonalna flaga i komentarz), blokady użytkowników</td>
+        <tr><td>Oceny po spacerze (polecam/nie polecam, opcjonalna flaga i komentarz), blokady użytkowników, zgłoszenia treści („Zgłoś”: powód, opcjonalny opis)</td>
             <td>bezpieczeństwo społeczności: reputacja przy otwartych spacerach, ochrona przed nękaniem</td>
             <td>art. 6 ust. 1 lit. f RODO (uzasadniony interes: bezpieczeństwo użytkowników)</td></tr>
         <tr><td>Eko-zgłoszenia (opis, lokalizacja opisowa, zdjęcia)</td>
@@ -123,15 +123,18 @@
             Link z e-maila może otworzyć się od razu w aplikacji (Android App Links — system
             sprawdza, że adres seasteps.pl należy do tej aplikacji).</li>
         <li><strong>Token sesji</strong> przechowujemy w pamięci aplikacji na telefonie.
-            Aplikacja ma wyłączoną kopię zapasową w chmurze Google, więc dane aplikacji
-            (w tym dane logowania) nie trafiają do kopii zapasowej Twojego konta Google.</li>
+            Aplikacja ma wyłączoną kopię zapasową w chmurze Google i wykluczone wszystkie
+            swoje dane z przenoszenia na nowe urządzenie, więc dane aplikacji (w tym dane
+            logowania) nie trafiają do kopii zapasowej Twojego konta Google ani nie są
+            kopiowane przy przenoszeniu danych na nowy telefon — tam zalogujesz się ponownie.</li>
         <li>Aplikacja nie zawiera reklam, bibliotek reklamowych ani zewnętrznych narzędzi
             analitycznych.</li>
       </ul>
 
       <h2>4. Jak długo przechowujemy dane</h2>
       <ul>
-        <li>dane konta, trasy GPS, wiadomości, oceny, blokady — do usunięcia konta;</li>
+        <li>dane konta, trasy GPS, wiadomości, oceny, blokady, złożone przez Ciebie
+            zgłoszenia treści — do usunięcia konta;</li>
         <li>tokeny logowania (magiczny link) — 15 minut; tokeny weryfikacji e-maila — 24 godziny;</li>
         <li>zdjęcia eko-zgłoszeń — do usunięcia konta, przy czym kopie plików w magazynie
             zdjęć czyścimy niezwłocznie, nie później niż w ciągu 30 dni;</li>
@@ -145,9 +148,12 @@
       <ul>
         <li><strong>Usuń konto:</strong> Profil → Twoje dane → „Usuń konto". Operacja jest
             nieodwracalna i natychmiastowa: kasuje trasy GPS, wiadomości, znajomości,
-            oceny, blokady i eko-zgłoszenia oraz anonimizuje profil.</li>
+            oceny, blokady, eko-zgłoszenia i złożone przez Ciebie zgłoszenia treści,
+            usuwa Twoje konto w usłudze logowania (Supabase Auth) oraz anonimizuje profil.</li>
         <li><strong>Pobierz moje dane:</strong> Profil → Twoje dane → „Pobierz" — pełna kopia
-            Twoich danych w pliku JSON (prawo do przenoszenia, art. 20 RODO).</li>
+            Twoich danych w pliku JSON (prawo do przenoszenia, art. 20 RODO). W aplikacji
+            na Androidzie plik otwiera się w systemowym oknie udostępniania — zapiszesz go
+            w Plikach albo wyślesz, gdzie chcesz.</li>
         <li><strong>Bez dostępu do aplikacji:</strong> napisz z adresu e-mail konta na
             <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a> — usuniemy konto
             niezwłocznie, nie później niż w ciągu 30 dni. Instrukcja:
