@@ -570,10 +570,15 @@ export function Walk() {
               <span className="font-display text-lg font-bold">Lokalizacja podczas spaceru</span>
             </div>
             <p className="mt-2 text-sm text-muted">
-              SeaSteps zbiera Twoją pozycję GPS <strong>w trakcie aktywnego spaceru</strong> —
-              także przy zgaszonym ekranie (zobaczysz powiadomienie systemowe) — żeby liczyć
-              trasę, punkty i pokazywać Cię uczestnikom tej samej sesji. Poza spacerem
-              lokalizacja nie jest zbierana. Szczegóły w{' '}
+              SeaSteps zbiera Twoją <strong>dokładną lokalizację (GPS)</strong> od startu do
+              zakończenia spaceru — <strong>także gdy aplikacja działa w tle albo ekran jest
+              zgaszony</strong>. Przez cały ten czas widzisz powiadomienie „Spacer trwa".
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Po co: zapis trasy, liczenie dystansu i punktów oraz Twoja pozycja na mapie dla
+              uczestników tej samej sesji spaceru. Lokalizacji nie sprzedajemy i nie
+              przekazujemy reklamodawcom. Po zakończeniu spaceru i poza nim lokalizacja nie
+              jest zbierana. Szczegóły w{' '}
               <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
             </p>
             <div className="mt-4 flex gap-2">
