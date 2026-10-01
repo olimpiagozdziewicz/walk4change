@@ -54,6 +54,7 @@ pub async fn eco_photo_paths(pool: &PgPool, user: Uuid) -> Result<Vec<String>, A
 /// - Admin API ok, then COMMIT fails (rare) → the account stays intact; the
 ///   Supabase user is gone but the next OTP login recreates it and maps back
 ///   to the same account by e-mail, so the user simply retries deletion.
+///
 /// When `auth_admin` is `None` (env not configured) only the DB part runs and
 /// a warning is logged.
 pub async fn delete_account(
