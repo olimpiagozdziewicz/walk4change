@@ -26,9 +26,14 @@ pub struct AppConfig {
     pub supabase_url: Option<String>,
     /// Supabase anon (public) key, used as the `apikey` when validating tokens.
     pub supabase_anon_key: Option<String>,
-    /// Supabase service-role key — ONLY for storage cleanup at account
-    /// deletion (RODO tail, spec 2026-07-13). Never sent to clients.
+    /// Supabase service-role key — ONLY for account-deletion side effects:
+    /// storage cleanup (RODO tail, spec 2026-07-13) and deleting the matching
+    /// Supabase Auth user via the Admin API (2026-10-01). Never sent to clients.
+    /// Env: `SUPABASE_SERVICE_KEY` (fallback name `SUPABASE_SERVICE_ROLE_KEY`).
     pub supabase_service_key: Option<String>,
+    /// Mailbox notified about new content reports (`POST /reports`).
+    /// Env `ADMIN_EMAIL`; falls back to `SMTP_FROM` when unset.
+    pub admin_email: Option<String>,
 }
 
 /// SMTP configuration for sending magic-link emails.
@@ -146,7 +151,24 @@ impl AppConfig {
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.trim_end_matches('/').to_string());
         let supabase_anon_key = std::env::var("SUPABASE_ANON_KEY").ok().filter(|s| !s.trim().is_empty());
-        let supabase_service_key = std::env::var("SUPABASE_SERVICE_KEY").ok().filter(|s| !s.trim().is_empty());
+        let supabase_service_key = std::env::var("SUPABASE_SERVICE_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                std::env::var("SUPABASE_SERVICE_ROLE_KEY")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
+        if supabase_service_key.is_none() || supabase_url.is_none() {
+            tracing::warn!(
+                "SUPABASE_URL/SUPABASE_SERVICE_KEY not set: account deletion will NOT remove                  the Supabase Auth user nor eco photos (RODO tail)"
+            );
+        }
+        let admin_email = std::env::var("ADMIN_EMAIL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| s.contains('@'))
+            .or_else(|| mail.as_ref().map(|m| m.from.clone()));
 
         Ok(Self {
             database_url,
@@ -166,6 +188,7 @@ impl AppConfig {
             supabase_url,
             supabase_anon_key,
             supabase_service_key,
+            admin_email,
         })
     }
 
@@ -191,6 +214,7 @@ impl AppConfig {
             supabase_url: None,
             supabase_anon_key: None,
             supabase_service_key: None,
+            admin_email: None,
         }
     }
 }

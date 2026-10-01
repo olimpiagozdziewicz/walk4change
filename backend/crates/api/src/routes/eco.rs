@@ -185,6 +185,7 @@ type FeedRow = (
     i64,
     i64,
     bool,
+    uuid::Uuid,
 );
 
 /// `GET /api/v1/eco/reports` — recent reports across all users (community feed):
@@ -199,7 +200,8 @@ pub async fn list_reports(
                 u.display_name, \
                 (SELECT count(*) FROM eco_likes l WHERE l.report_id = e.id) AS like_count, \
                 (SELECT count(*) FROM eco_comments c WHERE c.report_id = e.id) AS comment_count, \
-                EXISTS(SELECT 1 FROM eco_likes l2 WHERE l2.report_id = e.id AND l2.user_id = $1) AS liked_by_me \
+                EXISTS(SELECT 1 FROM eco_likes l2 WHERE l2.report_id = e.id AND l2.user_id = $1) AS liked_by_me, \
+                e.user_id \
          FROM eco_reports e \
          JOIN users u ON u.id = e.user_id \
          ORDER BY e.created_at DESC LIMIT 50",
@@ -217,6 +219,8 @@ pub async fn list_reports(
             v["like_count"] = Value::from(r.11);
             v["comment_count"] = Value::from(r.12);
             v["liked_by_me"] = Value::from(r.13);
+            // Author id: lets the client hide "Zgłoś" on the caller's own posts.
+            v["user_id"] = Value::String(r.14.to_string());
             v
         })
         .collect();

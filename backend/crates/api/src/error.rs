@@ -34,6 +34,10 @@ pub enum AppError {
     Validation(Vec<FieldError>),
     #[error("Too many requests")]
     RateLimited,
+    /// 503: a required upstream (e.g. Supabase Auth Admin API) failed; the
+    /// operation was rolled back and the client may retry.
+    #[error("Service unavailable: {0}")]
+    Unavailable(String),
     /// Use for unexpected errors. Detail is logged server-side; generic message is sent to client.
     #[error("Internal server error")]
     Internal(String),
@@ -94,6 +98,15 @@ impl IntoResponse for AppError {
                 "Too many requests — please slow down".to_string(),
                 None,
             ),
+            AppError::Unavailable(msg) => {
+                tracing::error!(detail = %msg, "upstream unavailable");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "SERVICE_UNAVAILABLE",
+                    "Service temporarily unavailable — please retry".to_string(),
+                    None,
+                )
+            }
             AppError::Internal(msg) => {
                 tracing::error!(detail = %msg, "internal error");
                 (

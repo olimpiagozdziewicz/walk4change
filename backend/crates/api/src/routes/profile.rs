@@ -113,7 +113,8 @@ pub async fn delete_me(
         .await
         .unwrap_or_default();
 
-    gdpr_repo::delete_account(&state.pool, auth.id).await?;
+    let auth_admin = crate::supabase_admin::SupabaseAdmin::from_config(&state.config);
+    gdpr_repo::delete_account(&state.pool, auth.id, auth_admin.as_ref()).await?;
 
     // Best-effort czyszczenie plików w buckecie `eco-photos` (RODO tail):
     // wymaga service key; błąd nie może cofnąć już wykonanego usunięcia konta,
@@ -126,7 +127,7 @@ pub async fn delete_me(
             let user = auth.id;
             tokio::spawn(async move {
                 let endpoint = format!("{}/storage/v1/object/eco-photos", url.trim_end_matches('/'));
-                let res = reqwest::Client::new()
+                let res = crate::util::http::client()
                     .delete(&endpoint)
                     .header("apikey", &key)
                     .header(reqwest::header::AUTHORIZATION, format!("Bearer {key}"))

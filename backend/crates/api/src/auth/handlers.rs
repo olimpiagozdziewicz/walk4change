@@ -343,7 +343,7 @@ pub async fn supabase_exchange(
         .as_ref()
         .ok_or_else(|| AppError::internal("supabase auth is not configured"))?;
 
-    let resp = reqwest::Client::new()
+    let resp = crate::util::http::client()
         .get(format!("{url}/auth/v1/user"))
         .header("apikey", anon)
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", body.access_token.trim()))

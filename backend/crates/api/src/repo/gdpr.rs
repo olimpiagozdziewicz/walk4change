@@ -4,7 +4,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::error::AppError;
+use crate::{error::AppError, supabase_admin::SupabaseAdmin};
 
 /// Storage object paths (inside the `eco-photos` bucket) of every photo the
 /// user attached to eco reports. Collected BEFORE `delete_account` removes the
@@ -44,8 +44,35 @@ pub async fn eco_photo_paths(pool: &PgPool, user: Uuid) -> Result<Vec<String>, A
 /// reference an identifiable person.
 ///
 /// The freed e-mail can immediately register a fresh account.
-pub async fn delete_account(pool: &PgPool, user: Uuid) -> Result<(), AppError> {
+///
+/// Supabase Auth (2026-10-01): when `auth_admin` is given, the matching
+/// Supabase Auth user (found by the ORIGINAL e-mail) is deleted through the
+/// Admin API while the DB transaction is still open — after all local writes
+/// succeeded and right before COMMIT. Semantics ("nothing half-done"):
+/// - Admin API error/timeout → the transaction is rolled back, nothing is
+///   deleted, the client gets 503 and can retry;
+/// - Admin API ok, then COMMIT fails (rare) → the account stays intact; the
+///   Supabase user is gone but the next OTP login recreates it and maps back
+///   to the same account by e-mail, so the user simply retries deletion.
+/// When `auth_admin` is `None` (env not configured) only the DB part runs and
+/// a warning is logged.
+pub async fn delete_account(
+    pool: &PgPool,
+    user: Uuid,
+    auth_admin: Option<&SupabaseAdmin>,
+) -> Result<(), AppError> {
     let mut tx = pool.begin().await.map_err(AppError::internal)?;
+
+    // Original e-mail (needed for the Supabase Auth lookup) — read and lock
+    // the row before the tombstone overwrites it.
+    let email: Option<String> = sqlx::query_scalar(
+        "SELECT email::text FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
+    )
+    .bind(user)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(AppError::internal)?;
+    let email = email.ok_or(AppError::NotFound)?;
 
     // Likes/comments hang off eco_reports without ON DELETE — clear the
     // user's own activity AND everything attached to the user's reports.
@@ -62,6 +89,7 @@ pub async fn delete_account(pool: &PgPool, user: Uuid) -> Result<(), AppError> {
         "DELETE FROM user_blocks WHERE blocker_id = $1 OR blocked_id = $1",
         "DELETE FROM friendships WHERE requester_id = $1 OR addressee_id = $1",
         "DELETE FROM walk_ratings WHERE rater_id = $1 OR rated_id = $1",
+        "DELETE FROM content_reports WHERE reporter_id = $1",
     ] {
         sqlx::query(sql)
             .bind(user)
@@ -94,6 +122,24 @@ pub async fn delete_account(pool: &PgPool, user: Uuid) -> Result<(), AppError> {
 
     if rows == 0 {
         return Err(AppError::NotFound);
+    }
+
+    match auth_admin {
+        Some(admin) => match admin.delete_user_by_email(&email).await {
+            Ok(outcome) => {
+                tracing::info!(user = %user, outcome = ?outcome, "supabase auth user purge");
+            }
+            Err(e) => {
+                // Dropping `tx` rolls everything back.
+                return Err(AppError::Unavailable(format!(
+                    "account deletion rolled back for {user}: {e}"
+                )));
+            }
+        },
+        None => tracing::warn!(
+            user = %user,
+            "supabase auth user NOT deleted: SUPABASE_URL/SUPABASE_SERVICE_KEY not configured"
+        ),
     }
 
     tx.commit().await.map_err(AppError::internal)?;
@@ -231,6 +277,13 @@ pub async fn export(pool: &PgPool, user: Uuid) -> Result<serde_json::Value, AppE
     )
     .await?;
 
+    let content_reports = section(
+        pool,
+        "SELECT COALESCE(json_agg(t), '[]')::text FROM (             SELECT id, target_type, target_id, reason, note, status, created_at             FROM content_reports WHERE reporter_id = $1) t",
+        user,
+    )
+    .await?;
+
     Ok(serde_json::json!({
         "format": "seasteps-export",
         "version": 1,
@@ -245,5 +298,6 @@ pub async fn export(pool: &PgPool, user: Uuid) -> Result<serde_json::Value, AppE
         "reward_redemptions": redemptions,
         "eco_reports": eco_reports,
         "blocked_users": blocked_users,
+        "content_reports": content_reports,
     }))
 }

@@ -23,6 +23,7 @@ pub mod routes;
 pub mod scoring;
 pub mod seed;
 pub mod state;
+pub mod supabase_admin;
 pub mod util;
 pub mod ws;
 
@@ -264,6 +265,7 @@ pub fn build_app(state: AppState) -> Router {
             "/api/v1/eco/reports/:id/comments",
             get(routes::eco::list_comments).post(routes::eco::create_comment),
         )
+        .route("/api/v1/reports", post(routes::reports::create_report))
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))
         .route("/api/v1/friends", get(routes::friends::list))
