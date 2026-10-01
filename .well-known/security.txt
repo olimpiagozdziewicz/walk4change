@@ -1,0 +1,5 @@
+Contact: mailto:admin@seasteps.pl
+Expires: 2027-09-30T22:00:00.000Z
+Preferred-Languages: pl, en
+Policy: https://seasteps.pl/bezpieczenstwo.html
+Canonical: https://seasteps.pl/.well-known/security.txt
