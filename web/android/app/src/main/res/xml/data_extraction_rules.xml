@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Android 12+ (API 31+): allowBackup="false" NIE blokuje transferu urz¹dzenie->urz¹dzenie,
+  Android 12+ (API 31+): allowBackup="false" NIE blokuje transferu urzÄ…dzenie->urzÄ…dzenie,
   dlatego jawnie wykluczamy wszystkie domeny z kopii w chmurze i z przenoszenia danych.
-  Sesja (token), ustawienia i bufor spaceru nie opuszczaj¹ urz¹dzenia (privacy.html, 2026-10-01).
+  Sesja (token), ustawienia i bufor spaceru nie opuszczajÄ… urzÄ…dzenia (privacy.html, 2026-10-01).
 -->
 <data-extraction-rules>
     <cloud-backup>
