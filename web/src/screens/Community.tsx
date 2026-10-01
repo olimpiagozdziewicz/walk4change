@@ -16,9 +16,12 @@ import {
   Prohibit,
   ThumbsUp,
   X,
+  Flag,
 } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
 import { Avatar } from '../components/Avatar'
+import { ReportModal, type ReportTarget } from '../components/ReportModal'
+import { currentUserId } from '../lib/auth'
 import { useMode } from '../lib/mode'
 import { getInterests } from '../lib/interests'
 import { ApiError } from '../lib/http'
@@ -79,6 +82,9 @@ export function Community() {
   const [comments, setComments] = useState<Record<string, EcoComment[]>>({})
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const [commentSending, setCommentSending] = useState<string | null>(null)
+  // ── Zgłaszanie treści (regulamin pkt 7) ──
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null)
+  const myId = currentUserId()
 
   const toggleLike = async (reportId: string) => {
     // optymistycznie — cofamy przy błędzie
@@ -494,6 +500,19 @@ export function Community() {
                               <ChatCircle size={20} />
                               {(r.commentCount ?? 0) > 0 ? r.commentCount : 'Komentuj'}
                             </button>
+                            {r.authorId && r.authorId !== myId && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setReportTarget({ type: 'eco_post', id: r.id, label: `wpis ${r.author ?? 'użytkownika'}` })
+                                }
+                                className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-muted transition hover:text-rose-600 active:scale-90"
+                                aria-label="Zgłoś wpis"
+                              >
+                                <Flag size={16} />
+                                Zgłoś
+                              </button>
+                            )}
                           </div>
 
                           {/* komentarze */}
@@ -509,6 +528,19 @@ export function Community() {
                                         <span>{c.body}</span>{' '}
                                         <span className="text-[11px] font-semibold text-muted">{timeAgo(c.createdAt)}</span>
                                       </p>
+                                      {c.userId !== myId && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setReportTarget({ type: 'eco_comment', id: c.id, label: `komentarz ${c.author}` })
+                                          }
+                                          className="shrink-0 p-1 text-muted transition hover:text-rose-600 active:scale-90"
+                                          aria-label="Zgłoś komentarz"
+                                          title="Zgłoś komentarz"
+                                        >
+                                          <Flag size={14} />
+                                        </button>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -874,6 +906,7 @@ export function Community() {
         </section>
         )}
       </div>
+      {reportTarget && <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />}
     </div>
   )
 }

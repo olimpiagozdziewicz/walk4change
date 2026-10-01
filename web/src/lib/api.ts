@@ -82,6 +82,8 @@ export interface EcoReport {
   createdAt?: string
   /** Imię autora — tylko w feedzie społeczności (GET /eco/reports). */
   author?: string
+  /** Id autora — tylko w feedzie (ukrywa „Zgłoś” na własnych wpisach). */
+  authorId?: string
   likeCount?: number
   commentCount?: number
   likedByMe?: boolean
@@ -442,6 +444,7 @@ interface BackendEcoReport {
   photo_after_url: string | null
   created_at: string
   author?: string
+  user_id?: string
   like_count?: number
   comment_count?: number
   liked_by_me?: boolean
@@ -460,6 +463,7 @@ function mapEcoReport(r: BackendEcoReport): EcoReport {
     photoAfterUrl: r.photo_after_url,
     createdAt: r.created_at,
     author: r.author,
+    authorId: r.user_id,
     likeCount: r.like_count ?? 0,
     commentCount: r.comment_count ?? 0,
     likedByMe: r.liked_by_me ?? false,
@@ -498,6 +502,47 @@ async function addEcoComment(reportId: string, body: string): Promise<EcoComment
     body: { body },
   })
   return res.data ? mapEcoComment(res.data) : null
+}
+
+// ── Zgłaszanie treści (UGC, regulamin pkt 7) ──────────────
+export type ReportTargetType = 'eco_post' | 'eco_comment' | 'user'
+export type ReportReason =
+  | 'spam'
+  | 'harassment'
+  | 'hate'
+  | 'sexual'
+  | 'violence'
+  | 'privacy'
+  | 'illegal'
+  | 'other'
+
+export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'spam', label: 'Spam lub reklama' },
+  { value: 'harassment', label: 'Nękanie lub obrażanie' },
+  { value: 'hate', label: 'Mowa nienawiści' },
+  { value: 'sexual', label: 'Treści seksualne' },
+  { value: 'violence', label: 'Przemoc lub groźby' },
+  { value: 'privacy', label: 'Naruszenie prywatności (np. czyjś wizerunek, adres)' },
+  { value: 'illegal', label: 'Treść nielegalna' },
+  { value: 'other', label: 'Inny powód' },
+]
+
+/** POST /reports — zgłoś cudzą treść. Idempotentne (drugie zgłoszenie tego samego = OK). */
+async function reportContent(input: {
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  note?: string
+}): Promise<void> {
+  await apiRequest('/reports', {
+    method: 'POST',
+    body: {
+      target_type: input.targetType,
+      target_id: input.targetId,
+      reason: input.reason,
+      note: input.note?.trim() ? input.note.trim().slice(0, 500) : null,
+    },
+  })
 }
 
 /** Upload a photo to Supabase Storage (`eco-photos`); returns its public URL. */
@@ -1000,6 +1045,7 @@ export const api = {
   toggleEcoLike,
   getEcoComments: fetchEcoComments,
   addEcoComment,
+  reportContent,
   getMyWalks: fetchMyWalks,
   getWalkTrack: fetchWalkTrack,
   redeemReward,
