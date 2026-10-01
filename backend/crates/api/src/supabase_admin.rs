@@ -73,31 +73,51 @@ impl SupabaseAdmin {
             return Ok(AuthPurge::NotFound);
         }
 
-        let resp = self
-            .get("/auth/v1/admin/users")
-            .query(&[("filter", wanted.as_str()), ("page", "1"), ("per_page", "100")])
-            .send()
-            .await
-            .map_err(|e| format!("admin list users: {}", e.without_url()))?;
-        if !resp.status().is_success() {
-            return Err(format!("admin list users: HTTP {}", resp.status()));
+        // `filter` is a server-side hint, not a documented contract: if GoTrue
+        // ignores it we get the unfiltered list. So page through until a short
+        // page (or the safety cap) and match exactly on our side either way.
+        const PER_PAGE: usize = 100;
+        const MAX_PAGES: usize = 100; // 10 000 users — far above today's scale
+        let mut ids: Vec<String> = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let page_s = page.to_string();
+            let per_page_s = PER_PAGE.to_string();
+            let resp = self
+                .get("/auth/v1/admin/users")
+                .query(&[
+                    ("filter", wanted.as_str()),
+                    ("page", page_s.as_str()),
+                    ("per_page", per_page_s.as_str()),
+                ])
+                .send()
+                .await
+                .map_err(|e| format!("admin list users: {}", e.without_url()))?;
+            if !resp.status().is_success() {
+                return Err(format!("admin list users: HTTP {}", resp.status()));
+            }
+            let list: AdminUserList = resp
+                .json()
+                .await
+                .map_err(|e| format!("admin list users: bad body: {}", e.without_url()))?;
+            let page_len = list.users.len();
+            ids.extend(
+                list.users
+                    .into_iter()
+                    .filter(|u| {
+                        u.email
+                            .as_deref()
+                            .map(|e| e.trim().to_lowercase() == wanted)
+                            .unwrap_or(false)
+                    })
+                    .map(|u| u.id),
+            );
+            if page_len < PER_PAGE {
+                break;
+            }
+            if page == MAX_PAGES {
+                return Err("admin list users: page cap reached".into());
+            }
         }
-        let list: AdminUserList = resp
-            .json()
-            .await
-            .map_err(|e| format!("admin list users: bad body: {}", e.without_url()))?;
-
-        let ids: Vec<String> = list
-            .users
-            .into_iter()
-            .filter(|u| {
-                u.email
-                    .as_deref()
-                    .map(|e| e.trim().to_lowercase() == wanted)
-                    .unwrap_or(false)
-            })
-            .map(|u| u.id)
-            .collect();
 
         if ids.is_empty() {
             return Ok(AuthPurge::NotFound);
