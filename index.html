@@ -32,7 +32,21 @@
       "url": "https://seasteps.pl/",
       "email": "admin@seasteps.pl",
       "description": "SeaSteps to projekt grywalizowanej aplikacji do spacerów: punkty za ruch, więcej za spacer z drugą osobą i w naturze. Powstał na hackathonie Hack4Change 2026 (wyróżnienie jury).",
-      "founder": { "@id": "https://seasteps.pl/#person" }
+      "founder": { "@id": "https://seasteps.pl/#person" },
+      "parentOrganization": {
+        "@type": "Organization",
+        "@id": "https://seasteps.pl/#operator",
+        "name": "963 sp. z o.o.",
+        "legalName": "963 sp. z o.o.",
+        "taxID": "5842878792",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "ul. Aleksandra Gryglewskiego 6 lok. 8",
+          "postalCode": "80-303",
+          "addressLocality": "Gdańsk",
+          "addressCountry": "PL"
+        }
+      }
     },
     {
       "@type": "WebApplication",
@@ -337,7 +351,7 @@
       </div>
     </section>
 
-    <footer>SeaSteps — Hack4Change 2026 · Gdańsk · <a href="/regulamin.html" style="color:inherit;text-decoration:underline;">Regulamin</a> · <a href="/privacy.html" style="color:inherit;text-decoration:underline;">Polityka Prywatności</a></footer>
+    <footer>SeaSteps — Hack4Change 2026 · Gdańsk · usługodawca: 963 sp. z o.o. · <a href="/regulamin.html" style="color:inherit;text-decoration:underline;">Regulamin</a> · <a href="/privacy.html" style="color:inherit;text-decoration:underline;">Polityka Prywatności</a></footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
