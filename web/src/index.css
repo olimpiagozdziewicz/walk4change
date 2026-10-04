@@ -28,6 +28,31 @@
     height: 100%;
   }
 
+  /* Android 15+ rysuje apke pod paskiem stanu (edge-to-edge). Capacitor 8 na starszym
+     WebView (<140) wstrzykuje --safe-area-inset-top, na nowszym dziala env(). */
+  :root {
+    --app-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --app-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  }
+
+  #root {
+    box-sizing: border-box;
+    padding-top: var(--app-safe-top);
+  }
+
+  /* tlo pod paskiem stanu, zeby przewijana tresc nie wchodzila pod zegar i ikonki */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: var(--app-safe-top);
+    background: rgba(248, 252, 253, 0.92);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    z-index: 45;
+    pointer-events: none;
+  }
+
   body {
     margin: 0;
     font-family: var(--font-body);

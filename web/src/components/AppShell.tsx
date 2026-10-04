@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="relative flex min-h-[100svh] min-w-0 flex-1 flex-col overflow-x-clip">
         {/* ambient sea glow */}
         <div className="pointer-events-none absolute -top-24 right-0 h-72 w-72 rounded-full bg-sea/15 blur-3xl" />
-        <main className="no-scrollbar relative z-10 flex-1 overflow-x-hidden pb-28 lg:pb-12">
+        <main className="no-scrollbar relative z-10 flex-1 overflow-x-hidden pb-[calc(7rem+var(--app-safe-bottom))] lg:pb-12">
           <div className="mx-auto w-full lg:max-w-2xl">{children}</div>
         </main>
         <BottomNav />

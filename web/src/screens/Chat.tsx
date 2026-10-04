@@ -181,7 +181,7 @@ export function Chat() {
 
   return (
     <div className="flex flex-col">
-      <header className="sticky top-0 z-20 flex items-center gap-3 bg-bg/85 px-5 pb-3 pt-4 backdrop-blur-md">
+      <header className="sticky top-[var(--app-safe-top)] z-20 flex items-center gap-3 bg-bg/85 px-5 pb-3 pt-4 backdrop-blur-md">
         <button
           type="button"
           onClick={() => navigate('/community')}
