@@ -34,6 +34,14 @@
                 <data android:scheme="https" android:host="seasteps.pl" android:pathPrefix="/app/auth/magic" />
             </intent-filter>
 
+            <!-- App Links: dołączenie do spaceru z kodu QR (spec 2026-10-05) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="seasteps.pl" android:path="/app/walk" />
+            </intent-filter>
+
         </activity>
 
         <provider

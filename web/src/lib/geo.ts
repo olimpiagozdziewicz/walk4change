@@ -51,9 +51,33 @@ interface BgPlugin {
   ): Promise<string>
   removeWatcher(options: { id: string }): Promise<void>
   openSettings(): Promise<void>
+  // z bazowej klasy Plugin (Capacitor) — alias "location" z adnotacji pluginu
+  checkPermissions(): Promise<{ location: string }>
+  requestPermissions(): Promise<{ location: string }>
 }
 
 const BackgroundGeolocation = registerPlugin<BgPlugin>('BackgroundGeolocation')
+
+// Nasz mini-plugin z MainActivity: zgoda na powiadomienia (Android 13+),
+// bez niej powiadomienie „Spacer trwa” jest niewidoczne.
+const WalkSupport = registerPlugin<{ requestPermissions(): Promise<{ notifications: string }> }>('WalkSupport')
+
+/**
+ * Zgoda na lokalizację PRZED addWatcher. Plugin przy braku zgody prosi o nią,
+ * ale nie czeka i od razu woła startForeground(type=location) — Android 14+
+ * odrzuca to bez zgody, a po jej nadaniu plugin już nie ponawia promocji
+ * usługi. Bez usługi pierwszoplanowej GPS w tle zamiera (bug 05.10.2026).
+ */
+async function ensureNativePermissions(): Promise<boolean> {
+  try {
+    await WalkSupport.requestPermissions()
+  } catch {
+    /* stary build bez pluginu albo Android < 13 — spacer działa dalej */
+  }
+  let state = (await BackgroundGeolocation.checkPermissions()).location
+  if (state !== 'granted') state = (await BackgroundGeolocation.requestPermissions()).location
+  return state === 'granted'
+}
 
 /**
  * Nasłuch pozycji. Zwraca uchwyt ze `stop()` — bezpieczny do wywołania
@@ -64,11 +88,16 @@ export function watchPosition(
   onError: (message: string) => void,
 ): GeoWatch {
   if (isNativeApp()) {
-    const idPromise = BackgroundGeolocation.addWatcher(
+    let stopped = false
+    const idPromise = ensureNativePermissions().then((granted) => {
+      if (!granted) throw Object.assign(new Error('Permission denied.'), { code: 'NOT_AUTHORIZED' })
+      if (stopped) throw new Error('stopped')
+      return BackgroundGeolocation.addWatcher(
       {
         backgroundTitle: 'Spacer trwa',
         backgroundMessage: 'SeaSteps liczy Twoją trasę i punkty.',
-        requestPermissions: true,
+        // zgoda już jest (ensureNativePermissions) — patrz komentarz wyżej
+        requestPermissions: false,
         stale: false,
         // Serwer i tak ma deadband 5 m; filtr 3 m tnie szum bez utraty kroków.
         distanceFilter: 3,
@@ -87,12 +116,19 @@ export function watchPosition(
         if (position.simulated) return
         onFix({ lat: position.latitude, lng: position.longitude, accuracy: position.accuracy ?? null })
       },
-    )
-    idPromise.catch((e: unknown) =>
-      onError(`Nie udało się uruchomić GPS: ${e instanceof Error ? e.message : 'nieznany błąd'}`),
-    )
+      )
+    })
+    idPromise.catch((e: unknown) => {
+      if (stopped) return
+      onError(
+        (e as BgError)?.code === 'NOT_AUTHORIZED'
+          ? 'Brak zgody na lokalizację. Nadaj uprawnienie w ustawieniach aplikacji.'
+          : `Nie udało się uruchomić GPS: ${e instanceof Error ? e.message : 'nieznany błąd'}`,
+      )
+    })
     return {
       stop: () => {
+        stopped = true
         idPromise.then((id) => BackgroundGeolocation.removeWatcher({ id })).catch(() => {})
       },
     }

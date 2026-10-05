@@ -15,6 +15,8 @@ import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
 import { setWalkActive } from '../lib/walkGuard'
+import { saveActiveWalk, loadActiveWalk, clearActiveWalk, takePendingJoin, type ActiveWalk } from '../lib/activeWalk'
+import { JoinQr } from '../components/JoinQr'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
 
@@ -99,6 +101,10 @@ export function Walk() {
   const watchRef = useRef<GeoWatch | null>(null)
   const [disclosureFor, setDisclosureFor] = useState<string | null>(null)
   const lastSentRef = useRef(0)
+  // Ostatni dobry fix, którego nie dało się wysłać (WS zerwany) — idzie od razu
+  // po ponownym połączeniu. Kolejka nie ma sensu: serwer bierze ping ≤45 s.
+  const pendingFixRef = useRef<{ lat: number; lng: number; acc?: number } | null>(null)
+  const joinCodeRef = useRef<string | null>(null)
   // WS reconnect-with-backoff: `closedByClientRef` różni celowe zamknięcie
   // (stop/leave ekranu) od zerwania sieci — tylko wtedy odpalamy retry.
   const closedByClientRef = useRef(false)
@@ -247,6 +253,7 @@ export function Walk() {
       routeSeed: Math.abs(Math.round((mine?.meters ?? 0) * 1000)) || Date.now() % 100000,
       photos: [],
     })
+    clearActiveWalk()
     void Promise.allSettled([
       apiRequest(`/walks/${sid}/stop`, { method: 'POST' }),
       apiRequest(`/walks/${sid}/leave`, { method: 'POST' }),
@@ -280,7 +287,19 @@ export function Walk() {
       nature: parseFloat(p.nature_mult),
       isMe: p.user_id === currentUserId(),
     })
-    if (p.user_id === currentUserId()) addMeters(seg)
+    if (p.user_id === currentUserId()) {
+      addMeters(seg)
+      const mineNow = map.get(p.user_id)!
+      if (startedAtRef.current != null) {
+        saveActiveWalk({
+          sessionId: p.session_id,
+          joinCode: joinCodeRef.current,
+          startedAt: startedAtRef.current,
+          meters: mineNow.meters,
+          points: mineNow.points,
+        })
+      }
+    }
     flush()
   }
 
@@ -348,7 +367,19 @@ export function Walk() {
     const sock = new LiveSocket({
       // Reconnect (backoff) i powrót z tła współdzielą tę samą ścieżkę:
       // po (ponownym) otwarciu zawsze auth + subscribe od nowa.
-      onOpen: () => { reconnectAttemptRef.current = 0; sock.subscribeSession(id); sock.subscribeLeaderboard() },
+      onOpen: () => {
+        reconnectAttemptRef.current = 0
+        sock.subscribeSession(id)
+        sock.subscribeLeaderboard()
+        const f = pendingFixRef.current
+        if (f) {
+          seqRef.current += 1
+          if (sock.sendPing(id, seqRef.current, f.lat, f.lng, f.acc)) {
+            pendingFixRef.current = null
+            lastSentRef.current = Date.now()
+          }
+        }
+      },
       onPingScored: onPing,
       onLeaderboard,
       onError: (m) => setError(m),
@@ -364,14 +395,27 @@ export function Walk() {
     return sock
   }
 
-  const connectAndStream = (id: string, startedAtIso?: string) => {
+  const connectAndStream = (id: string, startedAtIso?: string, code: string | null = null, resume?: ActiveWalk) => {
     closedByClientRef.current = false
     reconnectAttemptRef.current = 0
     clearReconnectTimer()
     socketRef.current?.close()
-    walkersRef.current = new Map(); flush()
+    walkersRef.current = new Map()
     seqRef.current = 0; setSec(0); setSummary(null); resetSteps(); setMyTrack([])
+    pendingFixRef.current = null
+    joinCodeRef.current = code
     setStopping(false)
+    // Wznowienie po zabiciu procesu: moje metry/punkty/kroki z zapisu, żeby
+    // licznik nie startował od zera (serwer i tak trzyma sumę punktów).
+    const myId = currentUserId()
+    if (resume && myId) {
+      walkersRef.current.set(myId, {
+        userId: myId, name: nameFor(myId), color: COLORS[0], trail: [],
+        points: resume.points, meters: resume.meters, together: 1, nature: 1, isMe: true,
+      })
+      addMeters(resume.meters)
+    }
+    flush()
     // Nowa sesja spaceru — ustawiane raz, tu, nie w efekcie na każdy render,
     // żeby przetrwać re-rendery (patrz komentarz przy deklaracji ref).
     // startedAtIso (POST /walks dla hosta) jest autorytatywny od razu; gdy
@@ -379,7 +423,8 @@ export function Walk() {
     // zastępca — walkDetail-polling effect nadpisze go server-side wartością
     // przy pierwszym pobraniu (leci natychmiast po aktywacji).
     const parsedStart = startedAtIso ? Date.parse(startedAtIso) : NaN
-    startedAtRef.current = Number.isNaN(parsedStart) ? Date.now() : parsedStart
+    startedAtRef.current = resume ? resume.startedAt : Number.isNaN(parsedStart) ? Date.now() : parsedStart
+    saveActiveWalk(resume ?? { sessionId: id, joinCode: code, startedAt: startedAtRef.current, meters: 0, points: 0 })
     socketRef.current = makeSock(id)
     startGps(id)
     setPhase('active')
@@ -400,6 +445,36 @@ export function Walk() {
     setSearchParams(next, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, searchParams])
+
+  // Start ekranu: (1) wznowienie spaceru przerwanego zabiciem apki w tle,
+  // (2) dołączenie z linku/QR (…/walk?join=KOD). Raz, w fazie idle.
+  const bootRef = useRef(false)
+  useEffect(() => {
+    if (phase !== 'idle' || bootRef.current) return
+    bootRef.current = true
+    const saved = loadActiveWalk()
+    if (saved) {
+      const resume = () => {
+        if (phaseRef.current !== 'idle') return // w międzyczasie ruszył inny spacer
+        setSessionId(saved.sessionId); setJoinCode(saved.joinCode)
+        connectAndStream(saved.sessionId, undefined, saved.joinCode, saved)
+      }
+      const myId = currentUserId()
+      api.getWalkDetail(saved.sessionId).then(
+        (d) => {
+          const meP = d.participants.find((p) => p.userId === myId)
+          if (d.status === 'active' && meP && !meP.leftAt) resume()
+          else clearActiveWalk()
+        },
+        // brak sieci — wznawiamy optymistycznie; „Zakończ spacer” zawsze domyka
+        resume,
+      )
+      return
+    }
+    const code = takePendingJoin()
+    if (code) { setCodeInput(code); void joinWalk(code) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
   // z pętlą backoff powyżej — patrz reconnectSocket).
@@ -432,7 +507,7 @@ export function Walk() {
       })
       if (!res.data) throw new Error('no session')
       setSessionId(res.data.id); setJoinCode(res.data.join_code); setCodeInput('')
-      connectAndStream(res.data.id, res.data.started_at)
+      connectAndStream(res.data.id, res.data.started_at, res.data.join_code)
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED'
@@ -442,16 +517,16 @@ export function Walk() {
     } finally { setBusy(false) }
   }
 
-  const joinWalk = async () => {
+  const joinWalk = async (fromLink?: string) => {
     if (busy) return
-    const code = codeInput.trim().toUpperCase()
+    const code = (fromLink ?? codeInput).trim().toUpperCase()
     if (!code) return
     setBusy(true); setError(null)
     try {
       const res = await apiRequest<{ session_id: string }>('/walks/join-by-code', { method: 'POST', body: { code } })
       if (!res.data?.session_id) throw new Error('bad code')
       setSessionId(res.data.session_id); setJoinCode(code)
-      connectAndStream(res.data.session_id)
+      connectAndStream(res.data.session_id, undefined, code)
     } catch { setError('Nie znaleziono spaceru o tym kodzie (musi być aktywny).') } finally { setBusy(false) }
   }
 
@@ -480,9 +555,14 @@ export function Walk() {
         // ~4 s cadence so genuine walking (>~1 m/s) clears the server's 5 m
         // jitter deadband, while stationary drift stays under it.
         if (now - lastSentRef.current < 4000) return
-        lastSentRef.current = now
         seqRef.current += 1
-        socketRef.current?.sendPing(id, seqRef.current, lat, lng, acc ?? undefined)
+        const sent = socketRef.current?.sendPing(id, seqRef.current, lat, lng, acc ?? undefined) ?? false
+        if (sent) {
+          lastSentRef.current = now
+          pendingFixRef.current = null
+        } else {
+          pendingFixRef.current = { lat, lng, acc: acc ?? undefined }
+        }
       },
       (message) => setGpsNote(message),
     )
@@ -531,6 +611,7 @@ export function Walk() {
         photos: [],
       })
     }
+    clearActiveWalk()
     stopStreaming()
     // Podsumowanie jest liczone lokalnie — pokazujemy je od razu, a stop/leave
     // (nieistotne dla UI, każde już wcześniej best-effort) lecą w tle
@@ -681,7 +762,7 @@ export function Walk() {
                 <label className="block text-xs font-bold uppercase tracking-wide text-muted">…albo dołącz do znajomego — wpisz jego kod</label>
                 <div className="mt-1 flex gap-2">
                   <input value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="np. 4G3YL7OA" maxLength={8} className="w-full rounded-xl border border-white/70 bg-white/80 px-3 py-2 font-mono text-sm tracking-widest outline-none" />
-                  <SoftButton onClick={joinWalk}>Dołącz</SoftButton>
+                  <SoftButton onClick={() => joinWalk()}>Dołącz</SoftButton>
                 </div>
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
               </Card>
@@ -723,7 +804,8 @@ export function Walk() {
 
               {joinCode && (
                 <Card className="mt-3 p-3">
-                  <p className="text-xs text-muted">Kod dla osoby obok (wpisuje go w „Dołącz"):</p>
+                  <p className="text-xs text-muted">Osoby obok skanują QR aparatem telefonu albo wpisują kod w „Dołącz" (może dołączyć kilka osób):</p>
+                  <JoinQr code={joinCode} />
                   <div className="mt-1 flex items-center justify-between">
                     <code className="text-2xl font-extrabold tracking-widest text-deep">{joinCode}</code>
                     <button onClick={copyCode} className="text-sea" aria-label="Kopiuj kod">{copied ? <CheckCircle size={22} weight="fill" /> : <Copy size={22} />}</button>

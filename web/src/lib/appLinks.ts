@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { App } from '@capacitor/app'
+import { normalizeJoinCode, setPendingJoin } from './activeWalk'
 
 /**
  * Android App Links (spec 2026-10-01): https://seasteps.pl/app/auth/magic#access_token=…
@@ -7,12 +8,21 @@ import { App } from '@capacitor/app'
  * więc sesję ustawiamy ręcznie i kierujemy router na istniejący ekran /auth/magic.
  */
 const MAGIC_PATH = '/app/auth/magic'
+const WALK_PATH = '/app/walk'
 
 async function handleUrl(url: string | undefined, navigate: (to: string) => void) {
   if (!url) return
   let u: URL
   try { u = new URL(url) } catch { return }
-  if (u.origin !== 'https://seasteps.pl' || !u.pathname.startsWith(MAGIC_PATH)) return
+  if (u.origin !== 'https://seasteps.pl') return
+  // QR „dołącz do spaceru” (spec 2026-10-05): kod czeka w storage, ekran Spacer go podejmie
+  if (u.pathname.replace(/\/$/, '') === WALK_PATH) {
+    const code = normalizeJoinCode(u.searchParams.get('join'))
+    if (code) setPendingJoin(code)
+    navigate('/walk')
+    return
+  }
+  if (!u.pathname.startsWith(MAGIC_PATH)) return
   const params = new URLSearchParams(u.hash.replace(/^#/, ''))
   const access_token = params.get('access_token')
   const refresh_token = params.get('refresh_token') ?? ''
