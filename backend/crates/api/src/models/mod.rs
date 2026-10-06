@@ -18,17 +18,31 @@ pub struct Profile {
     pub email_verified: bool,
 }
 
+/// Profil INNEGO użytkownika (lista znajomych / zaproszeń) — bez e-maila
+/// (audyt 2026-10-06, H2: lista znajomych zwracała cudze adresy e-mail).
+/// `Profile` z e-mailem zostaje tylko dla własnego konta (`/me`, auth).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct PublicProfile {
+    pub id: Uuid,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub interests: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub email_verified: bool,
+}
+
 /// A pending friendship request bundled with the other party's profile.
 #[derive(Debug, Serialize)]
 pub struct PendingItem {
     pub request_id: Uuid,
-    pub user: Profile,
+    pub user: PublicProfile,
 }
 
 /// Result of `GET /api/v1/friends`.
 #[derive(Debug, Serialize)]
 pub struct FriendsList {
-    pub accepted: Vec<Profile>,
+    pub accepted: Vec<PublicProfile>,
     pub incoming_pending: Vec<PendingItem>,
     pub outgoing_pending: Vec<PendingItem>,
 }

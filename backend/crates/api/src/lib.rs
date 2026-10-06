@@ -233,7 +233,6 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/v1/auth/register", post(auth::handlers::register))
         .route("/api/v1/auth/login", post(auth::handlers::login))
         .route("/api/v1/auth/logout", post(auth::handlers::logout))
-        .route("/api/v1/auth/magic/request", post(auth::handlers::magic_request))
         .route("/api/v1/auth/magic/verify", post(auth::handlers::magic_verify))
         .route("/api/v1/auth/supabase", post(auth::handlers::supabase_exchange))
         .route(

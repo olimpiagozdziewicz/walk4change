@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, FieldError},
-    models::{FriendsList, PendingItem, Profile},
+    models::{FriendsList, PendingItem, PublicProfile},
 };
 
 /// Flat row returned from pending-request joins.
@@ -12,7 +12,6 @@ use crate::{
 struct PendingRow {
     pub request_id: Uuid,
     pub id: Uuid,
-    pub email: String,
     pub display_name: String,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
@@ -25,9 +24,8 @@ impl From<PendingRow> for PendingItem {
     fn from(r: PendingRow) -> Self {
         PendingItem {
             request_id: r.request_id,
-            user: Profile {
+            user: PublicProfile {
                 id: r.id,
-                email: r.email,
                 display_name: r.display_name,
                 avatar_url: r.avatar_url,
                 bio: r.bio,
@@ -197,10 +195,12 @@ pub async fn are_friends(pool: &PgPool, a: Uuid, b: Uuid) -> Result<bool, AppErr
 }
 
 /// Return all friendships (accepted + pending) for `actor`.
+///
+/// Cudze profile BEZ e-maila (audyt 2026-10-06, H2).
 pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     // Accepted: the other party's profile, direction-agnostic.
-    let accepted: Vec<Profile> = sqlx::query_as(
-        "SELECT u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
+    let accepted: Vec<PublicProfile> = sqlx::query_as(
+        "SELECT u.id, u.display_name, u.avatar_url, u.bio, \
                 u.interests, u.created_at, \
                 (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \
@@ -219,7 +219,7 @@ pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     // Incoming pending: actor is the addressee.
     let incoming_rows: Vec<PendingRow> = sqlx::query_as(
         "SELECT f.id AS request_id, \
-                u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
+                u.id, u.display_name, u.avatar_url, u.bio, \
                 u.interests, u.created_at, \
                 (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \
@@ -234,7 +234,7 @@ pub async fn list(pool: &PgPool, actor: Uuid) -> Result<FriendsList, AppError> {
     // Outgoing pending: actor is the requester.
     let outgoing_rows: Vec<PendingRow> = sqlx::query_as(
         "SELECT f.id AS request_id, \
-                u.id, u.email::text AS email, u.display_name, u.avatar_url, u.bio, \
+                u.id, u.display_name, u.avatar_url, u.bio, \
                 u.interests, u.created_at, \
                 (u.email_verified_at IS NOT NULL) AS email_verified \
          FROM friendships f \

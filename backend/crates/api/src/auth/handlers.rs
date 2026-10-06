@@ -84,7 +84,7 @@ pub async fn register(
 ) -> Result<(StatusCode, HeaderMap, Json<Value>), AppError> {
     let mut errors: Vec<FieldError> = Vec::new();
 
-    // Normalize the email the same way magic_request/supabase_exchange do, so a
+    // Normalize the email the same way supabase_exchange does, so a
     // single address can't spawn duplicate accounts differing only by case.
     let email = body.email.trim().to_lowercase();
     let display_name = body.display_name.trim();
@@ -186,65 +186,10 @@ pub async fn logout(_auth: AuthUser) -> (StatusCode, HeaderMap) {
     (StatusCode::NO_CONTENT, headers)
 }
 
-#[derive(Deserialize)]
-pub struct MagicRequest {
-    pub email: String,
-    /// Consent to terms + privacy (clause under the magic-link form).
-    /// Required only when the request CREATES a new account.
-    #[serde(default)]
-    pub accepted_terms: bool,
-}
-
-/// `POST /api/v1/auth/magic/request`
-///
-/// Passwordless login step 1: find-or-create a user for `email`, mint a one-time
-/// token, and email a magic link (`APP_URL/auth/magic?token=…`). Always returns
-/// 200 (does not reveal whether the account existed). 503 if SMTP isn't configured.
-pub async fn magic_request(
-    State(state): State<AppState>,
-    Json(body): Json<MagicRequest>,
-) -> Result<Json<Value>, AppError> {
-    let email = body.email.trim().to_lowercase();
-    if !email.contains('@') {
-        return Err(AppError::Validation(vec![FieldError {
-            field: "email".into(),
-            message: "must contain @".into(),
-            code: "INVALID_EMAIL".into(),
-        }]));
-    }
-
-    let mail_cfg = state
-        .config
-        .mail
-        .as_ref()
-        .ok_or_else(|| AppError::internal("magic-link email is not configured"))?;
-
-    // Find or create a passwordless user (random unusable password hash).
-    let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
-        Some(u) => u.id,
-        None => {
-            // Creating an account requires sign-up consent (RODO, spec 2026-07-13).
-            let mut errors = Vec::new();
-            require_terms(&mut errors, body.accepted_terms);
-            if !errors.is_empty() {
-                return Err(AppError::Validation(errors));
-            }
-            let id = Uuid::new_v4();
-            let hash = password::hash(&state.config, &random_string(40))?;
-            let display = email.split('@').next().unwrap_or("walker");
-            user_repo::create(&state.pool, id, &email, &hash, display, true).await?;
-            id
-        }
-    };
-
-    let token = random_string(48);
-    magic_repo::create_token(&state.pool, &token, user_id).await?;
-
-    let link = format!("{}/auth/magic?token={}", state.config.app_url.trim_end_matches('/'), token);
-    mail::send_magic_link(mail_cfg, &email, &link).await?;
-
-    Ok(Json(json!({ "data": { "sent": true } })))
-}
+// `POST /api/v1/auth/magic/request` (SMTP magic link) zdjęty z routera
+// 2026-10-06 (audyt, Low): frontend loguje przez Supabase OTP
+// (`/auth/supabase`), a stary endpoint zakładał konta i wysyłał maile na
+// dowolne adresy. `/auth/magic/verify` zostaje dla tokenów już wysłanych.
 
 #[derive(Deserialize)]
 pub struct MagicVerify {
@@ -261,7 +206,7 @@ pub async fn magic_verify(
 ) -> Result<Json<Value>, AppError> {
     let user_id = magic_repo::consume_token(&state.pool, body.token.trim()).await?;
     // Consuming a mailed one-time token proves mailbox ownership.
-    user_repo::set_email_verified(&state.pool, user_id).await?;
+    claim_email(&state, user_id).await?;
     user_repo::record_terms_if_missing(&state.pool, user_id).await?;
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
@@ -304,6 +249,9 @@ pub async fn verify_email_confirm(
     Json(body): Json<VerifyEmailConfirm>,
 ) -> Result<Json<Value>, AppError> {
     let user_id = verify_repo::consume_token(&state.pool, body.token.trim()).await?;
+    // Świadomie BEZ podmiany hasła (inaczej niż magic/supabase, audyt H3):
+    // ten link dostaje każdy po rejestracji hasłem — unieważnienie hasła
+    // wylogowałoby na stałe każdego normalnego użytkownika, a link nie loguje.
     user_repo::set_email_verified(&state.pool, user_id).await?;
     Ok(Json(json!({ "data": { "verified": true } })))
 }
@@ -320,6 +268,36 @@ pub struct SupabaseExchange {
 #[derive(Deserialize)]
 struct SupabaseUser {
     email: Option<String>,
+    /// Supabase ustawia to po potwierdzeniu skrzynki; bez tego token nie
+    /// dowodzi kontroli nad adresem (audyt 2026-10-06, Low).
+    #[serde(default)]
+    email_confirmed_at: Option<String>,
+}
+
+/// Znormalizowany e-mail z usera Supabase — tylko gdy adres jest
+/// POTWIERDZONY (`email_confirmed_at`) i wygląda na e-mail; inaczej `None`.
+fn confirmed_supabase_email(user: SupabaseUser) -> Option<String> {
+    let confirmed = user
+        .email_confirmed_at
+        .as_deref()
+        .is_some_and(|c| !c.trim().is_empty());
+    if !confirmed {
+        return None;
+    }
+    user.email
+        .map(|e| e.trim().to_lowercase())
+        .filter(|e| e.contains('@'))
+}
+
+/// Logowanie dowiodło kontroli nad skrzynką: przy niezweryfikowanym koncie
+/// zweryfikuj e-mail i unieważnij hasło (ktoś mógł zarejestrować cudzy adres
+/// z własnym hasłem) — patrz [`user_repo::claim_unverified_email`].
+async fn claim_email(state: &AppState, user_id: Uuid) -> Result<(), AppError> {
+    if user_repo::is_email_verified(&state.pool, user_id).await? {
+        return Ok(());
+    }
+    let unusable = password::hash(&state.config, &random_string(40))?;
+    user_repo::claim_unverified_email(&state.pool, user_id, &unusable).await
 }
 
 /// `POST /api/v1/auth/supabase`
@@ -356,11 +334,7 @@ pub async fn supabase_exchange(
     }
 
     let user: SupabaseUser = resp.json().await.map_err(AppError::internal)?;
-    let email = user
-        .email
-        .map(|e| e.trim().to_lowercase())
-        .filter(|e| e.contains('@'))
-        .ok_or(AppError::Unauthorized)?;
+    let email = confirmed_supabase_email(user).ok_or(AppError::Unauthorized)?;
 
     let user_id = match user_repo::find_by_email(&state.pool, &email).await? {
         Some(u) => u.id,
@@ -380,10 +354,48 @@ pub async fn supabase_exchange(
     };
 
     // Supabase already validated the mailbox via its own magic link.
-    user_repo::set_email_verified(&state.pool, user_id).await?;
+    claim_email(&state, user_id).await?;
     user_repo::record_terms_if_missing(&state.pool, user_id).await?;
 
     let token = jwt::encode(&state.config, user_id)?;
     let profile = user_repo::get_profile(&state.pool, user_id).await?;
     Ok(Json(json!({ "token": token, "data": profile })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn su(email: Option<&str>, confirmed: Option<&str>) -> SupabaseUser {
+        SupabaseUser {
+            email: email.map(str::to_owned),
+            email_confirmed_at: confirmed.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn supabase_email_requires_confirmation() {
+        assert_eq!(confirmed_supabase_email(su(Some("a@b.pl"), None)), None);
+        assert_eq!(confirmed_supabase_email(su(Some("a@b.pl"), Some(""))), None);
+    }
+
+    #[test]
+    fn supabase_email_confirmed_is_normalized() {
+        assert_eq!(
+            confirmed_supabase_email(su(Some(" A@B.pl "), Some("2026-10-06T10:00:00Z"))),
+            Some("a@b.pl".to_owned())
+        );
+    }
+
+    #[test]
+    fn supabase_email_must_look_like_email() {
+        assert_eq!(confirmed_supabase_email(su(Some("nope"), Some("2026-10-06T10:00:00Z"))), None);
+        assert_eq!(confirmed_supabase_email(su(None, Some("2026-10-06T10:00:00Z"))), None);
+    }
+
+    #[test]
+    fn supabase_user_json_without_confirmation_parses() {
+        let u: SupabaseUser = serde_json::from_str(r#"{"email":"a@b.pl","email_confirmed_at":null}"#).unwrap();
+        assert_eq!(confirmed_supabase_email(u), None);
+    }
 }

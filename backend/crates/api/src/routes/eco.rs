@@ -83,6 +83,44 @@ const POINTS_CLEANUP: i32 = 25;
 /// submissions still save, they just stop paying out).
 const MAX_PAID_REPORTS_PER_DAY: i64 = 10;
 
+/// Publiczny prefiks bucketu `eco-photos` (`None` bez `SUPABASE_URL`).
+pub fn eco_photos_prefix(state: &AppState) -> Option<String> {
+    state
+        .config
+        .supabase_url
+        .as_deref()
+        .map(|u| crate::util::validate::storage_public_prefix(u, "eco-photos"))
+}
+
+/// Przycięty URL; pusty/biały → `None` (nie zapisujemy pustych stringów).
+fn non_blank(v: Option<String>) -> Option<String> {
+    v.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
+}
+
+/// Puste zgłoszenie dawało punkty i pusty wpis w feedzie (audyt 2026-10-06):
+/// wymagana kategoria ORAZ opis albo choć jedno zdjęcie.
+fn check_not_empty_report(
+    errors: &mut Vec<FieldError>,
+    category: &str,
+    description: &str,
+    has_photo: bool,
+) {
+    if category.trim().is_empty() {
+        errors.push(FieldError {
+            field: "category".into(),
+            message: "must not be empty".into(),
+            code: "REQUIRED".into(),
+        });
+    }
+    if description.trim().is_empty() && !has_photo {
+        errors.push(FieldError {
+            field: "description".into(),
+            message: "description or photo is required".into(),
+            code: "REQUIRED".into(),
+        });
+    }
+}
+
 /// `POST /api/v1/eco/reports` — create an eco report for the authenticated user.
 ///
 /// Also credits points (report +15 / cleanup +25) to `user_totals`, capped at
@@ -109,9 +147,21 @@ pub async fn create_report(
     crate::util::validate::check_max_len(&mut errors, "category", body.category.trim(), 40);
     crate::util::validate::check_max_len(&mut errors, "description", body.description.trim(), 1000);
     crate::util::validate::check_max_len(&mut errors, "location", body.location.trim(), 200);
-    crate::util::validate::check_optional_url(&mut errors, "photo_url", body.photo_url.as_deref());
-    crate::util::validate::check_optional_url(&mut errors, "photo_before_url", body.photo_before_url.as_deref());
-    crate::util::validate::check_optional_url(&mut errors, "photo_after_url", body.photo_after_url.as_deref());
+    // Zdjęcia tylko z NASZEGO bucketu `eco-photos` (audyt 2026-10-06, M1):
+    // te URL-e trafiają potem do kasowania plików service key przy RODO.
+    let prefix = eco_photos_prefix(&state);
+    for (field, value) in [
+        ("photo_url", body.photo_url.as_deref()),
+        ("photo_before_url", body.photo_before_url.as_deref()),
+        ("photo_after_url", body.photo_after_url.as_deref()),
+    ] {
+        crate::util::validate::check_optional_storage_url(&mut errors, field, value, prefix.as_deref());
+    }
+    let photo_url = non_blank(body.photo_url);
+    let photo_before_url = non_blank(body.photo_before_url);
+    let photo_after_url = non_blank(body.photo_after_url);
+    let has_photo = photo_url.is_some() || photo_before_url.is_some() || photo_after_url.is_some();
+    check_not_empty_report(&mut errors, &body.category, &body.description, has_photo);
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
     }
@@ -131,9 +181,9 @@ pub async fn create_report(
     .bind(body.description.trim())
     .bind(body.location.trim())
     .bind(status)
-    .bind(body.photo_url)
-    .bind(body.photo_before_url)
-    .bind(body.photo_after_url)
+    .bind(photo_url)
+    .bind(photo_before_url)
+    .bind(photo_after_url)
     .fetch_one(&mut *tx)
     .await
     .map_err(AppError::internal)?;
@@ -404,4 +454,41 @@ pub async fn list_my_reports(
         .map(|r| row_json(r.0, r.1, r.2, r.3, r.4, r.5, r.6, r.7, r.8, r.9))
         .collect();
     Ok(response::data(items))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn codes(category: &str, description: &str, has_photo: bool) -> Vec<String> {
+        let mut e = Vec::new();
+        check_not_empty_report(&mut e, category, description, has_photo);
+        e.into_iter().map(|f| format!("{}:{}", f.field, f.code)).collect()
+    }
+
+    #[test]
+    fn empty_report_is_rejected() {
+        assert_eq!(
+            codes("", "  ", false),
+            vec!["category:REQUIRED".to_owned(), "description:REQUIRED".to_owned()]
+        );
+    }
+
+    #[test]
+    fn category_is_always_required() {
+        assert_eq!(codes(" ", "opis", true), vec!["category:REQUIRED".to_owned()]);
+    }
+
+    #[test]
+    fn category_with_description_or_photo_passes() {
+        assert!(codes("Śmieci", "opis", false).is_empty());
+        assert!(codes("Śmieci", "", true).is_empty());
+    }
+
+    #[test]
+    fn non_blank_trims_and_drops_empty() {
+        assert_eq!(non_blank(Some("  ".into())), None);
+        assert_eq!(non_blank(None), None);
+        assert_eq!(non_blank(Some(" https://x/a.jpg ".into())), Some("https://x/a.jpg".into()));
+    }
 }

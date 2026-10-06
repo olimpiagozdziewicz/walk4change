@@ -81,7 +81,21 @@ pub async fn patch_me(
             crate::util::validate::check_max_len(&mut errors, "interests", it, 40);
         }
     }
-    crate::util::validate::check_optional_url(&mut errors, "avatar_url", body.avatar_url.as_deref());
+    // Avatar tylko z naszego Supabase Storage (audyt 2026-10-06, M1): obcy URL
+    // = piksel śledzący IP każdego, kto ogląda profil. Apka dziś avatara nie
+    // wgrywa (emoji po stronie klienta), osobnego bucketu brak — dopuszczamy
+    // dowolny publiczny bucket projektu.
+    let avatar_prefix = state
+        .config
+        .supabase_url
+        .as_deref()
+        .map(|u| crate::util::validate::storage_public_prefix(u, ""));
+    crate::util::validate::check_optional_storage_url(
+        &mut errors,
+        "avatar_url",
+        body.avatar_url.as_deref(),
+        avatar_prefix.as_deref(),
+    );
 
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
@@ -109,9 +123,14 @@ pub async fn delete_me(
     State(state): State<AppState>,
 ) -> Result<StatusCode, AppError> {
     // Zbierz ścieżki zdjęć eko PRZED skasowaniem wierszy (potem już ich nie ma).
-    let photo_paths = gdpr_repo::eco_photo_paths(&state.pool, auth.id)
-        .await
-        .unwrap_or_default();
+    // Tylko obiekty z naszego bucketu i niewskazywane przez nikogo innego
+    // (audyt 2026-10-06, M1 — uploady nie mają prefiksu usera).
+    let photo_paths = match crate::routes::eco::eco_photos_prefix(&state) {
+        Some(prefix) => gdpr_repo::eco_photo_paths(&state.pool, auth.id, &prefix)
+            .await
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
 
     let auth_admin = crate::supabase_admin::SupabaseAdmin::from_config(&state.config);
     gdpr_repo::delete_account(&state.pool, auth.id, auth_admin.as_ref()).await?;
