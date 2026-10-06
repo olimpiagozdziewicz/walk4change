@@ -10,7 +10,8 @@ import { RealMap } from '../components/RealMap'
 import { apiRequest, hasBackend, getToken, ApiError } from '../lib/http'
 import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
-import { watchPosition as watchGeoPosition, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch } from '../lib/geo'
+import { watchPosition as watchGeoPosition, watchSteps, isNativeApp, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch, type StepWatch } from '../lib/geo'
+import { createStepGate, metersBetween, type StepGate, type LatLng } from '../lib/stepGate'
 import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
@@ -26,6 +27,14 @@ const WS_RECONNECT_MAX_MS = 8000
 
 const GPS_SEARCHING_NOTE = 'Szukam pozycji GPS… (zezwól na lokalizację)'
 const GPS_WEAK_SIGNAL_NOTE = 'Słaby sygnał GPS — szukam dokładniejszej pozycji…'
+
+// Tryb czujnika kroków (spec 2026-10-06): ping, gdy pozycja po bramce kroków
+// przesunęła się co najmniej tyle (powyżej progu serwera 5 m — wolny spacer
+// nie gubi metrów), a w bezruchu ping kontrolny w tym samym miejscu (obecność
+// dla mnożnika „razem”, serwer liczy mu 0 m). Odstęp min. > limit serwera 1 s.
+const GATE_SEND_MIN_M = 6
+const GATE_HEARTBEAT_MS = 15_000
+const GATE_MIN_INTERVAL_MS = 1100
 
 type Phase = 'auth' | 'idle' | 'active' | 'summary'
 
@@ -112,7 +121,19 @@ export function Walk() {
   const reconnectAttemptRef = useRef(0)
   const [stopping, setStopping] = useState(false)
   const [summary, setSummary] = useState<{ points: number; meters: number; steps: number; together: boolean; nature: boolean } | null>(null)
-  const { steps, permissionNeeded, requestPermission, addMeters, reset: resetSteps } = useStepCounter()
+  const { steps, source: stepSource, permissionNeeded, requestPermission, addMeters, addSteps, reset: resetSteps } = useStepCounter()
+  // Czujnik kroków: 'pending' = apka czeka na odpowiedź czujnika (fixów nie
+  // wysyła, żeby surowy GPS nie wpadł przed bramką), 'gate' = bramka kroków,
+  // 'gps' = dotychczasowe liczenie z samego GPS (przeglądarka / brak czujnika).
+  const stepModeRef = useRef<'pending' | 'gate' | 'gps'>('gps')
+  const gateRef = useRef<StepGate | null>(null)
+  const stepWatchRef = useRef<StepWatch | null>(null)
+  const lastStepTotalRef = useRef(0)
+  const lastSentPosRef = useRef<LatLng | null>(null)
+  const stepGenRef = useRef(0)
+  const [paused, setPaused] = useState(false)
+  // Apka natywna bez czujnika/zgody — liczy z samego GPS; mówimy to wprost.
+  const [stepFallback, setStepFallback] = useState(false)
 
   // Lustrzane refy dla finalizacji przy odmontowaniu (cleanup efektu [] widzi
   // domknięcie z pierwszego renderu — stan byłby przeterminowany, refy nie).
@@ -182,6 +203,10 @@ export function Walk() {
       if (startedAtRef.current != null) {
         setSec(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
       }
+      // Auto-pauza: bramka kroków bez kroków od 10 s (GPS przy bezruchu
+      // może w ogóle nie dawać fixów, więc sprawdzamy tu, nie w handlerze fixa).
+      const gate = gateRef.current
+      setPaused(gate != null && !gate.isMoving(Date.now()))
     }
     tick()
     timer.current = window.setInterval(tick, 1000)
@@ -377,6 +402,7 @@ export function Walk() {
           if (sock.sendPing(id, seqRef.current, f.lat, f.lng, f.acc)) {
             pendingFixRef.current = null
             lastSentRef.current = Date.now()
+            lastSentPosRef.current = { lat: f.lat, lng: f.lng }
           }
         }
       },
@@ -547,6 +573,8 @@ export function Walk() {
           return
         }
         setGpsNote((prev) => (prev === null ? prev : null))
+        if (stepModeRef.current === 'pending') return
+        if (stepModeRef.current === 'gate') { onGatedFix(id, fix, acc); return }
         const { lat, lng } = fix
         // Ślad na mapę live — niezależny od throttle'u wysyłki pingów poniżej,
         // bo tylko rysuje trasę i nie wpływa na punktację (tę liczy serwer).
@@ -566,6 +594,74 @@ export function Walk() {
       },
       (message) => setGpsNote(message),
     )
+    // Po watchGeoPosition: to ono pyta o zgody (też „Aktywność fizyczna”),
+    // a czujnik musi poczekać na odpowiedź — inaczej przy pierwszym spacerze
+    // startuje bez zgody i spacer po cichu wraca do samego GPS.
+    startStepGate()
+  }
+
+  // ── czujnik kroków + bramka (spec 2026-10-06-czujnik-krokow-auto-pauza) ──
+  const startStepGate = () => {
+    stepWatchRef.current?.stop(); stepWatchRef.current = null
+    gateRef.current = null
+    lastSentPosRef.current = null
+    lastStepTotalRef.current = 0
+    setPaused(false)
+    setStepFallback(false)
+    const gen = ++stepGenRef.current
+    if (!isNativeApp()) { stepModeRef.current = 'gps'; return }
+    stepModeRef.current = 'pending'
+    void watchSteps((total) => {
+      if (gen !== stepGenRef.current) return
+      const delta = total - lastStepTotalRef.current
+      lastStepTotalRef.current = total
+      if (delta <= 0) return
+      gateRef.current?.onSteps(delta, Date.now())
+      addSteps(delta)
+      setPaused(false)
+    }).then((w) => {
+      // spacer już zamknięty albo czujnik wystartował ponownie
+      if (gen !== stepGenRef.current || stepModeRef.current !== 'pending') { w?.stop(); return }
+      stepWatchRef.current = w
+      if (w) {
+        gateRef.current = createStepGate()
+        stepModeRef.current = 'gate'
+        addSteps(0) // kroki od teraz z czujnika
+      } else {
+        stepModeRef.current = 'gps'
+        setStepFallback(true)
+      }
+    })
+  }
+
+  const sendGatedPing = (id: string, p: LatLng, acc: number | null, now: number) => {
+    seqRef.current += 1
+    const sent = socketRef.current?.sendPing(id, seqRef.current, p.lat, p.lng, acc ?? undefined) ?? false
+    if (sent) {
+      lastSentRef.current = now
+      lastSentPosRef.current = p
+      pendingFixRef.current = null
+    } else {
+      pendingFixRef.current = { lat: p.lat, lng: p.lng, acc: acc ?? undefined }
+    }
+  }
+
+  const onGatedFix = (id: string, fix: LatLng, acc: number | null) => {
+    const gate = gateRef.current
+    if (!gate) return
+    const now = Date.now()
+    const pos = gate.onFix(fix, now)
+    // Mapa rysuje pozycję po bramce — bez zygzaków dryfu, gdy stoisz.
+    setMyTrack((prev) => {
+      const last = prev[prev.length - 1]
+      return last && metersBetween(last, pos) < 1 ? prev : [...prev, pos].slice(-500)
+    })
+    const lastPos = lastSentPosRef.current
+    if (!lastPos) { sendGatedPing(id, pos, acc, now); return }
+    const since = now - lastSentRef.current
+    if (since < GATE_MIN_INTERVAL_MS) return
+    if (metersBetween(lastPos, pos) >= GATE_SEND_MIN_M) sendGatedPing(id, pos, acc, now)
+    else if (since >= GATE_HEARTBEAT_MS) sendGatedPing(id, lastPos, acc, now)
   }
 
   const stopStreaming = () => {
@@ -574,6 +670,9 @@ export function Walk() {
     closedByClientRef.current = true
     clearReconnectTimer()
     watchRef.current?.stop(); watchRef.current = null
+    stepWatchRef.current?.stop(); stepWatchRef.current = null
+    stepGenRef.current += 1
+    stepModeRef.current = 'gps'; gateRef.current = null
     socketRef.current?.close(); socketRef.current = null
     if (timer.current) window.clearInterval(timer.current)
   }
@@ -657,7 +756,9 @@ export function Walk() {
             </p>
             <p className="mt-2 text-sm text-muted">
               Po co: zapis trasy, liczenie dystansu i punktów oraz Twoja pozycja na mapie dla
-              uczestników tej samej sesji spaceru. Lokalizacji nie sprzedajemy i nie
+              uczestników tej samej sesji spaceru. Czujnik kroków telefonu (zgoda „Aktywność
+              fizyczna”) pozwala nie liczyć metrów, gdy stoisz — kroki zostają w telefonie.
+              Lokalizacji nie sprzedajemy i nie
               przekazujemy reklamodawcom. Po zakończeniu spaceru i poza nim lokalizacja nie
               jest zbierana. Szczegóły w{' '}
               <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
@@ -788,7 +889,7 @@ export function Walk() {
                   <Pill tone="leaf"><Leaf size={12} /> natura ×{mine?.nature ?? 1}</Pill>
                   <Pill tone="sea"><UsersThree size={12} /> we dwoje ×{mine?.together ?? 1}</Pill>
                   {combined > 1 && <Pill tone="sand">razem ×{combined.toFixed(1)}</Pill>}
-                  <Pill tone="muted"><Footprints size={12} /> GPS</Pill>
+                  <Pill tone="muted"><Footprints size={12} /> {stepSource === 'sensor' ? 'kroki + GPS' : 'GPS'}</Pill>
                 </div>
                 <p className="mt-3 text-center text-[11px] leading-snug text-muted">
                   Możesz zgasić ekran i schować telefon — spacer trwa, a trasa doliczy się po odblokowaniu.
@@ -797,6 +898,16 @@ export function Walk() {
                   <button onClick={requestPermission} className="mt-3 w-full rounded-2xl bg-sea/10 py-2 text-xs font-bold text-sea">
                     Zezwól na ruch, by liczyć kroki dokładniej →
                   </button>
+                )}
+                {paused && (
+                  <p className="mt-3 rounded-2xl bg-sand/20 py-2 text-center text-xs font-bold text-deep">
+                    ⏸ Pauza — stoisz w miejscu. Ruszysz, liczę dalej.
+                  </p>
+                )}
+                {stepFallback && (
+                  <p className="mt-3 text-center text-[11px] leading-snug text-muted">
+                    Bez zgody na „Aktywność fizyczną” kroki liczę z samego GPS — w budynku mniej dokładnie. Zgodę włączysz w ustawieniach aplikacji.
+                  </p>
                 )}
                 {gpsNote && <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><MapPin size={14} weight="fill" /> {gpsNote}</p>}
                 {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}

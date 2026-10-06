@@ -58,4 +58,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Czujnik kroków: apka wie, czy idziesz (spec 2026-10-06). Bez czujnika
+         działa dalej na samym GPS, więc nie odcinamy telefonów w Google Play. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
 </manifest>
