@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom'
+import { App as CapApp } from '@capacitor/app'
 import { initAppLinks } from './lib/appLinks'
+import { isWalkActive, WALK_LEAVE_CONFIRM } from './lib/walkGuard'
 import { hasPendingJoin, loadActiveWalk, normalizeJoinCode, setPendingJoin } from './lib/activeWalk'
 import { isAuthed, setAuthed } from './lib/auth'
 import { getToken } from './lib/http'
@@ -41,6 +43,31 @@ function WalkRedirect() {
   return null
 }
 
+/**
+ * Systemowe „wstecz” w apce Android. Bez tego Capacitor robi webView.goBack():
+ * w trakcie spaceru wychodził z ekranu i kończył spacer bez pytania, a na
+ * ekranie głównym nic nie robił (apki nie dało się zamknąć gestem).
+ */
+function AndroidBackButton() {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let handle: { remove: () => Promise<void> } | null = null
+    let removed = false
+    CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (pathname === '/' || pathname === '/login' || !canGoBack) { void CapApp.minimizeApp(); return }
+      if (isWalkActive()) {
+        // Spacer trwa w tle także po zminimalizowaniu — „wstecz” go nie kończy.
+        if (!window.confirm(WALK_LEAVE_CONFIRM)) return
+      }
+      navigate(-1)
+    }).then((h) => { if (removed) void h.remove(); else handle = h })
+    return () => { removed = true; void handle?.remove() }
+  }, [pathname, navigate])
+  return null
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation()
   useEffect(() => { window.scrollTo(0, 0) }, [pathname])
@@ -73,6 +100,7 @@ function App() {
     <>
     <ScrollToTop />
     <WalkRedirect />
+    <AndroidBackButton />
     <Routes>
       {/* logowanie / zakładanie konta — pełny ekran, bez shellu */}
       <Route path="/login" element={<Login />} />

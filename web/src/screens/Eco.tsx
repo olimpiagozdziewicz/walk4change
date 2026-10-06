@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Camera, MapPin, PaperPlaneTilt, CheckCircle, Warning, Sparkle, Leaf } from '@phosphor-icons/react'
+import { Camera, PaperPlaneTilt, CheckCircle, Warning, Sparkle, Leaf } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { Celebrate } from '../components/Celebrate'
@@ -47,6 +47,13 @@ export function Eco() {
 
   const submit = async () => {
     if (busy) return
+    // Puste zgłoszenie dawało punkty i pusty wpis w feedzie (serwer też to
+    // teraz odrzuca) — wymagamy kategorii i opisu albo zdjęcia.
+    const hasPhoto = Boolean(reportPhoto || photoBefore || photoAfter)
+    if (!category || (!desc.trim() && !hasPhoto)) {
+      setError('Wybierz kategorię i dodaj opis albo zdjęcie.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -56,6 +63,11 @@ export function Eco() {
         photoBefore ? api.uploadEcoPhoto(photoBefore) : Promise.resolve(null),
         photoAfter ? api.uploadEcoPhoto(photoAfter) : Promise.resolve(null),
       ])
+      // Wybrane zdjęcie, które się nie wysłało, nie może zniknąć po cichu.
+      if ((reportPhoto && !pUrl) || (photoBefore && !pBefore) || (photoAfter && !pAfter)) {
+        setError('Nie udało się wysłać zdjęcia. Sprawdź internet i spróbuj ponownie.')
+        return
+      }
       await api.createEcoReport({
         kind: tab === 'report' ? 'report' : 'cleanup',
         category: category ?? '',
@@ -140,10 +152,7 @@ export function Eco() {
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink outline-none placeholder:text-muted/70 focus:ring-2 focus:ring-sea/30"
               />
-              <div className="grid grid-cols-2 gap-2.5">
-                <UploadBtn icon={<Camera size={18} />} label="Zdjęcie" onFile={setReportPhoto} />
-                <UploadBtn icon={<MapPin size={18} />} label="Lokalizacja" />
-              </div>
+              <UploadBtn icon={<Camera size={18} />} label="Zdjęcie" onFile={setReportPhoto} />
               {error && <p className="text-sm font-semibold text-rose-600">{error}</p>}
               <PrimaryButton onClick={submit} disabled={busy} className="w-full">
                 <PaperPlaneTilt size={18} /> {busy ? 'Wysyłam…' : 'Wyślij zgłoszenie'}
@@ -152,7 +161,7 @@ export function Eco() {
           ) : (
             <div className="space-y-3">
               <h2 className="font-display text-lg font-bold text-ink">Pochwal się — posprzątane!</h2>
-              <p className="-mt-1 text-sm text-muted">Coś ogarnęłaś sama? Pokaż efekt i zgarnij punkty.</p>
+              <p className="-mt-1 text-sm text-muted">Udało się coś ogarnąć? Pokaż efekt i zgarnij punkty.</p>
               <div className="flex flex-wrap gap-2">
                 {['Plaża', 'Park', 'Las', 'Ulica', 'Brzeg'].map((t) => (
                   <button key={t} type="button" onClick={() => setCategory(t)}>
@@ -163,7 +172,7 @@ export function Eco() {
               <textarea
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
-                placeholder="Co posprzątałaś? Np. worek śmieci z plaży w Brzeźnie…"
+                placeholder="Co zostało posprzątane? Np. worek śmieci z plaży w Brzeźnie…"
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink outline-none placeholder:text-muted/70 focus:ring-2 focus:ring-leaf/30"
               />

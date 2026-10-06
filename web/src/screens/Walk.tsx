@@ -16,7 +16,7 @@ import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
 import { setWalkActive } from '../lib/walkGuard'
-import { saveActiveWalk, loadActiveWalk, clearActiveWalk, takePendingJoin, type ActiveWalk } from '../lib/activeWalk'
+import { saveActiveWalk, loadActiveWalk, clearActiveWalk, takePendingJoin, PENDING_JOIN_EVENT, type ActiveWalk } from '../lib/activeWalk'
 import { JoinQr } from '../components/JoinQr'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
@@ -27,6 +27,7 @@ const WS_RECONNECT_MAX_MS = 8000
 
 const GPS_SEARCHING_NOTE = 'Szukam pozycji GPS… (zezwól na lokalizację)'
 const GPS_WEAK_SIGNAL_NOTE = 'Słaby sygnał GPS — szukam dokładniejszej pozycji…'
+const JOIN_LINK_CONFIRM = 'Dołączyć do spaceru z tego linku?\n\nPodczas spaceru Twoja pozycja będzie widoczna na żywo dla jego uczestników. Dołączaj tylko do osób, które znasz.'
 
 // Tryb czujnika kroków (spec 2026-10-06): ping, gdy pozycja po bramce kroków
 // przesunęła się co najmniej tyle (powyżej progu serwera 5 m — wolny spacer
@@ -427,7 +428,12 @@ export function Walk() {
     clearReconnectTimer()
     socketRef.current?.close()
     walkersRef.current = new Map()
-    seqRef.current = 0; setSec(0); setSummary(null); resetSteps(); setMyTrack([])
+    // Wznowienie: seq musi być większy niż wszystko, co ta sesja już wysłała —
+    // serwer odrzuca powtórzony (session,user,seq) po cichu, więc po zabiciu
+    // apki spacer stałby w miejscu. Pingów nie wysyłamy częściej niż ~1/s,
+    // więc dwa na sekundę od startu to bezpieczny zapas (bez zapisu seq).
+    seqRef.current = resume ? Math.max(0, Math.floor((Date.now() - resume.startedAt) / 500)) : 0
+    setSec(0); setSummary(null); resetSteps(); setMyTrack([])
     pendingFixRef.current = null
     joinCodeRef.current = code
     setStopping(false)
@@ -502,7 +508,20 @@ export function Walk() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
+  // QR zeskanowany, gdy ekran Spacer już jest otwarty: efekt startowy wyżej
+  // odpala się raz, więc nowy kod z App Linka przychodzi zdarzeniem.
+  useEffect(() => {
+    if (phase !== 'idle') return
+    const onJoin = () => {
+      const code = takePendingJoin()
+      if (code) { setCodeInput(code); void joinWalk(code) }
+    }
+    window.addEventListener(PENDING_JOIN_EVENT, onJoin)
+    return () => window.removeEventListener(PENDING_JOIN_EVENT, onJoin)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+    // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
   // z pętlą backoff powyżej — patrz reconnectSocket).
   useEffect(() => {
     if (phase !== 'active') return
@@ -547,6 +566,9 @@ export function Walk() {
     if (busy) return
     const code = (fromLink ?? codeInput).trim().toUpperCase()
     if (!code) return
+    // Link/QR mógł przysłać ktokolwiek — dołączenie udostępnia pozycję na żywo,
+    // więc przy linku pytamy (wpisany ręcznie kod = świadoma decyzja).
+    if (fromLink && !window.confirm(JOIN_LINK_CONFIRM)) return
     setBusy(true); setError(null)
     try {
       const res = await apiRequest<{ session_id: string }>('/walks/join-by-code', { method: 'POST', body: { code } })
@@ -664,6 +686,19 @@ export function Walk() {
     else if (since >= GATE_HEARTBEAT_MS) sendGatedPing(id, lastPos, acc, now)
   }
 
+  // „Nie teraz” w oknie o lokalizacji: spacer bez GPS nie ma sensu (licznik
+  // leciałby, a trasa nie), więc go anulujemy zamiast zostawiać „żywą” sesję.
+  const cancelWalkWithoutGps = (id: string) => {
+    stopStreaming()
+    clearActiveWalk()
+    setPhase('idle')
+    setError('Spacer anulowany — bez lokalizacji nie policzymy trasy ani punktów.')
+    void Promise.allSettled([
+      apiRequest(`/walks/${id}/stop`, { method: 'POST' }),
+      apiRequest(`/walks/${id}/leave`, { method: 'POST' }),
+    ])
+  }
+
   const stopStreaming = () => {
     // Zamknięcie z woli klienta (stop/leave ekranu) — pętla reconnect ma się
     // odpuścić, nie próbować wskrzeszać sesji, którą sami kończymy.
@@ -766,7 +801,7 @@ export function Walk() {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => setDisclosureFor(null)}
+                onClick={() => { const id = disclosureFor; setDisclosureFor(null); if (id) cancelWalkWithoutGps(id) }}
                 className="flex-1 rounded-2xl border border-white/70 bg-white/60 py-2.5 text-sm font-bold text-muted transition active:scale-[0.98]"
               >
                 Nie teraz

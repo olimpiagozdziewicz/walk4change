@@ -4,4 +4,6 @@
     <string name="title_activity_main">SeaSteps</string>
     <string name="package_name">pl.seasteps.app</string>
     <string name="custom_url_scheme">pl.seasteps.app</string>
+    <!-- ikona powiadomienia usługi GPS (plugin background-geolocation) -->
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_walk</string>
 </resources>

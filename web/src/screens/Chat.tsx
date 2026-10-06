@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { CaretLeft, PaperPlaneRight, Prohibit } from '@phosphor-icons/react'
+import { CaretLeft, Flag, PaperPlaneRight, Prohibit } from '@phosphor-icons/react'
+import { ReportModal } from '../components/ReportModal'
 import { Avatar } from '../components/Avatar'
 import { currentUserId } from '../lib/auth'
 import { ApiError } from '../lib/http'
@@ -37,6 +38,8 @@ export function Chat() {
   const [sending, setSending] = useState(false)
   // blokada rozmówcy: pierwszy klik uzbraja, drugi blokuje i wraca do listy
   const [blockArmed, setBlockArmed] = useState(false)
+  // Zgłoszenie osoby (polityka UGC Google Play: zgłaszanie + blokowanie).
+  const [reporting, setReporting] = useState(false)
   const [blocking, setBlocking] = useState(false)
 
   const myId = currentUserId()
@@ -196,6 +199,15 @@ export function Chat() {
         </div>
         <button
           type="button"
+          onClick={() => setReporting(true)}
+          aria-label={`Zgłoś ${displayName}`}
+          title="Zgłoś osobę — nękanie, spam, nieodpowiednie treści"
+          className="glass inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition active:scale-95"
+        >
+          <Flag size={16} />
+        </button>
+        <button
+          type="button"
           onClick={blockPartner}
           disabled={blocking}
           aria-label={`Zablokuj ${displayName}`}
@@ -263,6 +275,9 @@ export function Chat() {
           </div>
         </div>
       </div>
+      {reporting && userId && (
+        <ReportModal target={{ type: 'user', id: userId, label: displayName }} onClose={() => setReporting(false)} />
+      )}
     </div>
   )
 }

@@ -545,11 +545,34 @@ async function reportContent(input: {
   })
 }
 
+/**
+ * Zdjęcie z aparatu (12–50 Mpx) łatwo przekracza limit 5 MB koszyka — przed
+ * wysyłką skalujemy dłuższy bok do 1600 px i zapisujemy jako JPEG. Gdy
+ * przeglądarka nie umie zdekodować pliku, wysyłamy oryginał.
+ */
+async function shrinkPhoto(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
+    if (scale === 1 && file.size < 1_500_000 && file.type === 'image/jpeg') return file
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.85))
+    return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
 /** Upload a photo to Supabase Storage (`eco-photos`); returns its public URL. */
-export async function uploadEcoPhoto(file: File): Promise<string | null> {
+export async function uploadEcoPhoto(original: File): Promise<string | null> {
   try {
     const { supabase, hasSupabase } = await import('./supabase')
     if (!hasSupabase()) return null
+    const file = await shrinkPhoto(original)
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const id = (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.() ?? `${Date.now()}-${Math.round(Math.random() * 1e9)}`
     const path = `${id}.${ext}`

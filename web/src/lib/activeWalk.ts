@@ -61,12 +61,16 @@ export function joinUrl(code: string): string {
 }
 
 // Kod z linku/QR musi przetrwać przekierowanie na logowanie — stąd storage.
+/** Zdarzenie „nowy kod z QR” — dla już otwartego ekranu Spacer. */
+export const PENDING_JOIN_EVENT = 'ss-pending-join'
+
 export function setPendingJoin(code: string): void {
   try {
     sessionStorage.setItem(JOIN_KEY, code)
   } catch {
     /* ignore */
   }
+  window.dispatchEvent(new Event(PENDING_JOIN_EVENT))
 }
 
 export function takePendingJoin(): string | null {

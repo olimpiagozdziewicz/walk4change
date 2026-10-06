@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mała ikona powiadomienia „Spacer trwa” (jednokolorowa — Android i tak
+     rysuje ją na biało; kolorowa ikona apki wychodziła jako biały kwadrat). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7.5,2C5.6,2 4.5,4.2 4.5,6.8C4.5,9.3 5.4,11.5 7.2,11.5C8.9,11.5 9.9,9.6 9.9,7C9.9,4.3 9.2,2 7.5,2ZM5,13.2L9.8,12.4C10.1,14.6 9.5,16.2 7.7,16.5C6,16.8 5.2,15.4 5,13.2ZM16.5,6.5C14.8,6.5 14.1,8.8 14.1,11.5C14.1,14.1 15.1,16 16.8,16C18.6,16 19.5,13.8 19.5,11.3C19.5,8.7 18.4,6.5 16.5,6.5ZM14.2,16.9L19,17.7C18.8,19.9 18,21.3 16.3,21C14.5,20.7 13.9,19.1 14.2,16.9Z" />
+</vector>

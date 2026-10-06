@@ -42,7 +42,7 @@ export function Login() {
       } else {
         await register(email, pass, email.split('@')[0], terms)
       }
-      nav('/')
+      nav('/', { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Błąd logowania.')
     } finally {
@@ -74,7 +74,7 @@ export function Login() {
     setLoading(true)
     try {
       await verifyMagicCode(email, code)
-      nav('/')
+      nav('/', { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Nie udało się zalogować kodem.')
     } finally {

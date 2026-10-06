@@ -53,6 +53,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Usługa GPS pluginu ma w swoim manifeście exported="true": każda inna
+             apka mogła się do niej podpiąć, a jej onUnbind zatrzymywał śledzenie
+             spaceru (przegląd 06.10). Apka wiąże się z nią sama, z zewnątrz nie trzeba. -->
+        <service
+            android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService"
+            android:exported="false"
+            tools:replace="android:exported" />
     </application>
 
     <!-- Permissions -->
@@ -62,4 +70,7 @@
          działa dalej na samym GPS, więc nie odcinamy telefonów w Google Play. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <!-- Plugin wymaga sprzętowego GPS; tablety/telefony z lokalizacją sieciową też
+         mogą liczyć spacer, więc nie odcinamy ich w Google Play. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" tools:replace="android:required" />
 </manifest>
