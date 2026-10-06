@@ -1027,7 +1027,7 @@ export function Walk() {
                     {summary.together && <Pill tone="sea"><UsersThree size={12} /> we dwoje ×1.5</Pill>}
                   </div>
                 </div>
-                <p className="mt-4 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-[#2f7a45]"><HandHeart size={16} weight="fill" /> Jesteś coraz bliżej adopcji foki!</p>
+                <p className="mt-4 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-[#2f7a45]"><HandHeart size={16} weight="fill" /> Każdy spacer się liczy — tak trzymaj!</p>
               </Card>
               <RatingPanel sessionId={sessionId} />
               {leaderboard.length > 0 && (
