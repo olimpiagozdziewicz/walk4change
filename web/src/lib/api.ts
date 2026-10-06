@@ -164,12 +164,6 @@ const communityWalks: CommunityWalk[] = [
   { id: 'c3', who: 'Kamil', avatar: '🏃', where: 'Plaża Brzeźno', when: 'Sob 11:00', vibe: 'Żwawo + kawa' },
 ]
 
-const events: EventItem[] = [
-  { id: 'e1', title: 'Sprzątanie plaży Brzeźno', type: 'cleanup', date: 'Sob 28.06 • 10:00', place: 'Molo Brzeźno', peopleCount: 18, points: 120 },
-  { id: 'e2', title: 'Sadzenie drzew — Trójmiejski Park', type: 'planting', date: 'Nd 29.06 • 11:00', place: 'TPK, wejście Dolina Radości', peopleCount: 9, points: 200 },
-  { id: 'e3', title: 'Spacer społeczny nad Zatoką', type: 'social', date: 'Pt 27.06 • 18:00', place: 'Bulwar Nadmorski', peopleCount: 24, points: 60 },
-]
-
 const ecoReports: EcoReport[] = [
   { id: 'x1', type: 'Śmieci na brzegu', description: 'Worek śmieci przy wejściu na plażę', location: 'Brzeźno, molo', status: 'cleaned' },
   { id: 'x2', type: 'Większe zanieczyszczenie', description: 'Rozlana substancja przy kanale', location: 'Górki Zachodnie', status: 'reported' },
@@ -802,6 +796,8 @@ export interface OpenWalkItem {
   /** Reputacja hosta: liczba wszystkich ocen (agregat pokazujemy od ≥3). */
   hostRatingTotal: number
   hostRecommendCount: number
+  /** Kategoria „z psem” — tylko etykieta/filtr, bez wpływu na punkty. */
+  withDog: boolean
 }
 
 async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
@@ -814,6 +810,7 @@ async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
     participants: number
     host_rating_total?: number
     host_recommend_count?: number
+    with_dog?: boolean
   }[]>('/walks/open')
   return (res.data ?? []).map((w) => ({
     sessionId: w.session_id,
@@ -824,6 +821,7 @@ async function fetchOpenWalks(): Promise<OpenWalkItem[]> {
     participants: w.participants,
     hostRatingTotal: w.host_rating_total ?? 0,
     hostRecommendCount: w.host_recommend_count ?? 0,
+    withDog: w.with_dog ?? false,
   }))
 }
 
@@ -949,6 +947,7 @@ export interface ServerWalk {
   points: number
   isHost: boolean
   companions: number
+  withDog: boolean
 }
 
 async function fetchMyWalks(): Promise<ServerWalk[]> {
@@ -960,6 +959,7 @@ async function fetchMyWalks(): Promise<ServerWalk[]> {
     total_points: string
     is_host: boolean
     companions: number
+    with_dog?: boolean
   }[]>('/me/walks')
   return (res.data ?? []).map((w) => ({
     sessionId: w.session_id,
@@ -969,6 +969,50 @@ async function fetchMyWalks(): Promise<ServerWalk[]> {
     points: Math.round(parseFloat(w.total_points)),
     isHost: w.is_host,
     companions: w.companions,
+    withDog: w.with_dog ?? false,
+  }))
+}
+
+// ── Kalendarz wydarzeń IGTSF (backend: /events, cache 30 min po stronie serwera) ──
+export interface CalendarEvent {
+  id: number
+  title: string
+  /** Czas lokalny (Europe/Warsaw) bez strefy: `YYYY-MM-DDTHH:MM:SS`. */
+  start: string
+  end: string | null
+  allDay: boolean
+  venue: string | null
+  city: string | null
+  /** Zawsze https:// albo null (filtrowane na serwerze). */
+  url: string | null
+  image: string | null
+  description: string
+}
+
+async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
+  const res = await apiRequest<{
+    id: number
+    title: string
+    start: string
+    end: string | null
+    all_day: boolean
+    venue: string | null
+    city: string | null
+    url: string | null
+    image: string | null
+    description: string
+  }[]>('/events')
+  return (res.data ?? []).map((e) => ({
+    id: e.id,
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    allDay: e.all_day,
+    venue: e.venue,
+    city: e.city,
+    url: e.url,
+    image: e.image,
+    description: e.description,
   }))
 }
 
@@ -1033,7 +1077,7 @@ export const api = {
   getProfileCounters: fetchProfileCounters,
   getToday: fetchStats,
   getCommunityWalks: () => wait(communityWalks),
-  getEvents: () => wait(events),
+  getCalendarEvents: fetchCalendarEvents,
   getRewards: fetchRewards,
   getEcoReports: fetchEcoReports,
   getMyEcoReports: fetchMyEcoReports,

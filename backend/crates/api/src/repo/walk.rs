@@ -57,6 +57,7 @@ pub async fn start(
     host_id: Uuid,
     is_open: bool,
     open_note: Option<&str>,
+    with_dog: bool,
 ) -> Result<WalkSession, AppError> {
     let open_note = open_note.map(str::trim).filter(|s| !s.is_empty());
     if let Some(note) = open_note {
@@ -73,15 +74,17 @@ pub async fn start(
     let mut tx = pool.begin().await.map_err(AppError::internal)?;
 
     let session: WalkSession = sqlx::query_as(
-        "INSERT INTO walk_sessions (id, host_id, status, join_code, is_open, open_note) \
-         VALUES ($1, $2, 'active', $3, $4, $5) \
-         RETURNING id, host_id, status, join_code, started_at, ended_at, is_open, open_note",
+        "INSERT INTO walk_sessions (id, host_id, status, join_code, is_open, open_note, with_dog) \
+         VALUES ($1, $2, 'active', $3, $4, $5, $6) \
+         RETURNING id, host_id, status, join_code, started_at, ended_at, is_open, open_note, \
+                   with_dog",
     )
     .bind(session_id)
     .bind(host_id)
     .bind(&join_code)
     .bind(is_open)
     .bind(open_note)
+    .bind(with_dog)
     .fetch_one(&mut *tx)
     .await
     .map_err(AppError::internal)?;
@@ -480,7 +483,8 @@ pub async fn get(
     ensure_not_kicked_member(member_kicked_at(pool, session_id, actor).await?)?;
 
     let session: Option<WalkSession> = sqlx::query_as(
-        "SELECT id, host_id, status, join_code, started_at, ended_at, is_open, open_note \
+        "SELECT id, host_id, status, join_code, started_at, ended_at, is_open, open_note, \
+                with_dog \
          FROM walk_sessions WHERE id = $1",
     )
     .bind(session_id)
@@ -614,7 +618,7 @@ pub async fn set_open(
 pub async fn open_walks(pool: &PgPool) -> Result<Vec<OpenWalk>, AppError> {
     let walks: Vec<OpenWalk> = sqlx::query_as(
         "SELECT ws.id AS session_id, ws.host_id, u.display_name AS host_name, \
-                ws.open_note, ws.started_at, \
+                ws.open_note, ws.started_at, ws.with_dog, \
                 (SELECT count(*) FROM walk_participants wp \
                   WHERE wp.session_id = ws.id AND wp.left_at IS NULL) AS participants, \
                 (SELECT count(*) FROM walk_ratings r \
@@ -642,7 +646,7 @@ pub async fn my_walks(pool: &PgPool, actor: Uuid, limit: i64) -> Result<Vec<MyWa
     let walks: Vec<MyWalk> = sqlx::query_as(
         "SELECT ws.id AS session_id, ws.started_at, ws.ended_at, \
                 wp.total_meters, wp.total_points, \
-                (ws.host_id = $1) AS is_host, \
+                (ws.host_id = $1) AS is_host, ws.with_dog, \
                 (SELECT count(*) - 1 FROM walk_participants w2 \
                   WHERE w2.session_id = ws.id) AS companions \
          FROM walk_participants wp \

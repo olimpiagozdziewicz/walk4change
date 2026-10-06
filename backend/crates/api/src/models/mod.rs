@@ -60,6 +60,8 @@ pub struct WalkSession {
     pub is_open: bool,
     /// Optional host note shown on the open-walks list ("chętnie pogadam").
     pub open_note: Option<String>,
+    /// Walk-with-dog category (label/filter only, no scoring effect).
+    pub with_dog: bool,
 }
 
 /// A single participant in a walk session.
@@ -161,6 +163,8 @@ pub struct OpenWalk {
     pub participants: i64,
     pub host_rating_total: i64,
     pub host_recommend_count: i64,
+    /// Walk-with-dog category (label/filter only, no scoring effect).
+    pub with_dog: bool,
 }
 
 /// One of the caller's own post-walk ratings (`GET /walks/:id/ratings/mine`).
@@ -191,6 +195,8 @@ pub struct MyWalk {
     pub is_host: bool,
     /// Other participants (any who ever joined), excluding the caller.
     pub companions: i64,
+    /// Walk-with-dog category (label/filter only, no scoring effect).
+    pub with_dog: bool,
 }
 
 /// Minimal public user info for search results (no e-mail on purpose).

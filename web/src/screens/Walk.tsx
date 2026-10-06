@@ -99,6 +99,10 @@ export function Walk() {
   // "spaceruję — dołącz" (widoczność dla innych)
   const [isOpen, setIsOpen] = useState(false)
   const [openNote, setOpenNote] = useState('')
+  // „Idę z psem” — kategoria spaceru (etykieta/filtr), bez wpływu na punkty
+  const [withDog, setWithDog] = useState(false)
+  const withDogRef = useRef(false)
+  useEffect(() => { withDogRef.current = withDog }, [withDog])
 
   // live state
   const walkersRef = useRef<Map<string, Walker>>(new Map())
@@ -275,6 +279,7 @@ export function Walk() {
       points: Math.round(mine?.points ?? 0),
       withSomeone: walkersRef.current.size > 1,
       inNature: (mine?.nature ?? 1) > 1,
+      withDog: withDogRef.current,
       place: 'Spacer GPS',
       routeSeed: Math.abs(Math.round((mine?.meters ?? 0) * 1000)) || Date.now() % 100000,
       photos: [],
@@ -548,7 +553,7 @@ export function Walk() {
     try {
       const res = await apiRequest<WalkSession>('/walks', {
         method: 'POST',
-        body: { is_open: isOpen, open_note: isOpen && openNote.trim() ? openNote.trim() : null },
+        body: { is_open: isOpen, open_note: isOpen && openNote.trim() ? openNote.trim() : null, with_dog: withDog },
       })
       if (!res.data) throw new Error('no session')
       setSessionId(res.data.id); setJoinCode(res.data.join_code); setCodeInput('')
@@ -740,6 +745,7 @@ export function Walk() {
         points: finalPoints,
         withSomeone: walkers.length > 1,
         inNature: nat > 1,
+        withDog: withDogRef.current,
         place: 'Spacer GPS',
         routeSeed: Math.abs(Math.round((mine?.meters ?? 0) * 1000)) || Date.now() % 100000,
         photos: [],
@@ -891,6 +897,19 @@ export function Walk() {
                     className="mt-3 w-full resize-none rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-sm outline-none"
                   />
                 )}
+                <label className="mt-3 flex items-center justify-between gap-3 border-t border-white/60 pt-3">
+                  <span className="text-sm font-bold text-ink">Idę z psem 🐕</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={withDog}
+                    aria-label="Idę z psem"
+                    onClick={() => setWithDog((v) => !v)}
+                    className={`relative h-7 w-12 shrink-0 rounded-full border border-white/70 transition-colors ${withDog ? 'bg-sea' : 'bg-white/70'}`}
+                  >
+                    <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${withDog ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                </label>
               </Card>
 
               <PrimaryButton onClick={startWalk} className="mt-5 w-full py-4 text-base"><Play size={20} weight="fill" color="white" /> {busy ? 'Chwila…' : 'Rozpocznij spacer'}</PrimaryButton>

@@ -264,6 +264,7 @@ pub fn build_app(state: AppState) -> Router {
             "/api/v1/eco/reports/:id/comments",
             get(routes::eco::list_comments).post(routes::eco::create_comment),
         )
+        .route("/api/v1/events", get(routes::events::list_events))
         .route("/api/v1/reports", post(routes::reports::create_report))
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))

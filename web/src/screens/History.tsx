@@ -150,6 +150,11 @@ export function History() {
                         <UsersThree size={13} /> {companions}
                       </span>
                     )}
+                    {w.withDog && (
+                      <Pill tone="sand">
+                        <PawPrint size={12} /> z psem
+                      </Pill>
+                    )}
                     <CaretDown size={13} className={`ml-auto transition-transform ${expanded ? 'rotate-180' : ''}`} />
                   </div>
                 </div>

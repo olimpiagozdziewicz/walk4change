@@ -10,6 +10,7 @@ import { SponsorIcon } from '../components/SponsorIcon'
 import { Glyph } from '../components/Glyph'
 import { Avatar } from '../components/Avatar'
 import { useMode } from '../lib/mode'
+import { IGTSF_PARTNER } from '../lib/partners'
 import { api, type TodayStats, type Reward, type TeamToday, type Sponsor, type Profile } from '../lib/api'
 
 function Ring({ value, children }: { value: number; children: ReactNode }) {
@@ -274,11 +275,28 @@ export function Home() {
       <motion.div {...fade(6)} className="mt-6">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold text-ink">
-            <Storefront size={18} className="text-sea" /> Lokalni partnerzy <SoonBadge />
+            <Storefront size={18} className="text-sea" /> Partnerzy
           </h2>
           <button onClick={() => nav('/partners')} className="inline-flex items-center gap-0.5 text-sm font-bold text-sea">
             Wszystkie <CaretRight size={14} />
           </button>
+        </div>
+        {/* Prawdziwy partner (spec 2026-10-06) — nazwa/opis w lib/partners.ts */}
+        <button
+          onClick={() => nav('/events')}
+          className="glass mb-3 flex w-full items-center gap-3 rounded-3xl p-3 text-left transition active:scale-[0.99]"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-leaf/15 to-sea/12 text-[#2f7a45]">
+            <Leaf size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold leading-tight text-ink">{IGTSF_PARTNER.name}</span>
+            <span className="block text-xs text-muted">{IGTSF_PARTNER.description}</span>
+          </span>
+          <CaretRight size={16} className="shrink-0 text-sea" />
+        </button>
+        <div className="mb-2 flex items-center gap-2 text-xs font-bold text-muted">
+          Lokalne firmy <SoonBadge />
         </div>
         <div className="grid grid-cols-2 gap-3">
           {sponsors.slice(0, 4).map((s) => (

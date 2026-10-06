@@ -1,5 +1,6 @@
 pub mod blocks;
 pub mod eco;
+pub mod events;
 pub mod friends;
 pub mod leaderboard;
 pub mod messages;

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Storefront, MapPin, Ticket, HandHeart } from '@phosphor-icons/react'
-import { ScreenHeader, Card, Pill, PrimaryButton, SoonBadge, DemoBanner } from '../components/ui'
+import { Storefront, MapPin, Ticket, HandHeart, Leaf, CalendarDots, ArrowSquareOut } from '@phosphor-icons/react'
+import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
 import { SponsorIcon } from '../components/SponsorIcon'
 import { api, type Sponsor } from '../lib/api'
+import { IGTSF_PARTNER } from '../lib/partners'
 
 export function Partners() {
+  const nav = useNavigate()
   const [sponsors, setSponsors] = useState<Sponsor[]>([])
 
   useEffect(() => {
@@ -21,6 +24,33 @@ export function Partners() {
       />
 
       <div className="space-y-4 px-5 pt-2">
+        {/* Prawdziwy partner (spec 2026-10-06) — nazwa/opis w lib/partners.ts */}
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-leaf/15 to-sea/12 text-[#2f7a45]">
+              <Leaf size={28} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-lg font-bold leading-tight text-ink">{IGTSF_PARTNER.name}</div>
+              <div className="text-xs font-bold text-muted">{IGTSF_PARTNER.description}</div>
+            </div>
+            <Pill tone="leaf">partner</Pill>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <SoftButton onClick={() => nav('/events')} className="flex-1 py-2.5 text-sm">
+              <CalendarDots size={16} /> Wydarzenia
+            </SoftButton>
+            <a
+              href={IGTSF_PARTNER.siteUrl}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-5 py-2.5 text-sm font-bold text-deep transition active:scale-[0.97]"
+            >
+              igtsf.com <ArrowSquareOut size={14} />
+            </a>
+          </div>
+        </Card>
+
         <DemoBanner>
           Program partnerski w przygotowaniu. Tu lokalne firmy — kawiarnie, wypożyczalnie — będą nagradzać
           spacerowiczów. Poniżej przykłady, jak to będzie wyglądać. Chcesz być partnerem? Napisz do nas.

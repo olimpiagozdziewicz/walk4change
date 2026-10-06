@@ -34,6 +34,9 @@ pub struct StartWalkBody {
     pub is_open: bool,
     #[serde(default)]
     pub open_note: Option<String>,
+    /// "Idę z psem": category label only, no scoring effect (spec 2026-10-06).
+    #[serde(default)]
+    pub with_dog: bool,
 }
 
 /// `POST /api/v1/walks`
@@ -50,7 +53,7 @@ pub async fn start_walk(
     State(state): State<AppState>,
     body: Option<Json<StartWalkBody>>,
 ) -> Result<Response, AppError> {
-    let StartWalkBody { is_open, open_note } = body.map(|Json(b)| b).unwrap_or_default();
+    let StartWalkBody { is_open, open_note, with_dog } = body.map(|Json(b)| b).unwrap_or_default();
     // Open-walks gate (spec 2026-07-13): listing yourself publicly to
     // strangers requires a verified e-mail. Private/friend walks do not.
     if is_open && !crate::repo::user::is_email_verified(&state.pool, auth.id).await? {
@@ -63,6 +66,7 @@ pub async fn start_walk(
         auth.id,
         is_open,
         open_note.as_deref(),
+        with_dog,
     )
     .await?;
     let location = format!("/api/v1/walks/{}", session.id);

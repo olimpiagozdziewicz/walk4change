@@ -17,6 +17,7 @@ import {
   ThumbsUp,
   X,
   Flag,
+  PawPrint,
 } from '@phosphor-icons/react'
 import { ScreenHeader, Card, Pill, PrimaryButton, SoftButton, SoonBadge, DemoBanner } from '../components/ui'
 import { Avatar } from '../components/Avatar'
@@ -70,6 +71,8 @@ export function Community() {
 
   // ── Na spacerze teraz ──
   const [openWalks, setOpenWalks] = useState<OpenWalkItem[]>([])
+  const [dogsOnly, setDogsOnly] = useState(false)
+  const visibleOpenWalks = dogsOnly ? openWalks.filter((w) => w.withDog) : openWalks
   const [joiningId, setJoiningId] = useState<string | null>(null)
   const [joinErrors, setJoinErrors] = useState<Record<string, string>>({})
 
@@ -360,16 +363,32 @@ export function Community() {
             <>
             {/* ── Na spacerze teraz ── */}
             <section>
-              <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-ink">
-                <Footprints size={18} className="text-sea" /> Na spacerze teraz
-              </h2>
-              {openWalks.length === 0 ? (
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 font-display text-lg font-bold text-ink">
+                  <Footprints size={18} className="text-sea" /> Na spacerze teraz
+                </h2>
+                <button
+                  type="button"
+                  aria-pressed={dogsOnly}
+                  onClick={() => setDogsOnly((v) => !v)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                    dogsOnly ? 'bg-gradient-to-br from-sea to-deep text-white shadow' : 'bg-white/70 text-deep'
+                  }`}
+                >
+                  🐕 z psem
+                </button>
+              </div>
+              {visibleOpenWalks.length === 0 ? (
                 <Card className="p-4">
-                  <p className="text-sm text-muted">Nikt teraz nie spaceruje z otwartym zaproszeniem. Wyjdź na spacer i pokaż się innym!</p>
+                  <p className="text-sm text-muted">
+                    {dogsOnly && openWalks.length > 0
+                      ? 'Teraz nikt nie spaceruje z psem. Wyłącz filtr, żeby zobaczyć wszystkie spacery.'
+                      : 'Nikt teraz nie spaceruje z otwartym zaproszeniem. Wyjdź na spacer i pokaż się innym!'}
+                  </p>
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {openWalks.map((w, i) => {
+                  {visibleOpenWalks.map((w, i) => {
                     const mins = minutesAgo(w.startedAt)
                     const err = joinErrors[w.sessionId]
                     return (
@@ -388,6 +407,11 @@ export function Community() {
                                 {w.hostRatingTotal >= 3 && (
                                   <Pill tone="leaf">
                                     <ThumbsUp size={12} weight="fill" /> {w.hostRecommendCount}/{w.hostRatingTotal}
+                                  </Pill>
+                                )}
+                                {w.withDog && (
+                                  <Pill tone="sand">
+                                    <PawPrint size={12} /> z psem
                                   </Pill>
                                 )}
                               </div>
