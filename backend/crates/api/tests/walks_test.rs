@@ -423,3 +423,52 @@ async fn track_returns_ordered_pings_with_lat_lng() {
         "lng should be ~10.0, got {lng0}"
     );
 }
+
+/// with_dog (spec 2026-10-06): default false; `true` round-trips through
+/// POST /walks, GET /walks/:id and GET /me/walks after stop.
+#[tokio::test]
+async fn with_dog_flag_round_trips() {
+    let app = common::spawn().await;
+    let (_, host_token) = register_user(&app, "walk_dog1@example.com").await;
+
+    let (_, plain) = start_walk(&app, &host_token).await;
+    assert_eq!(plain["data"]["with_dog"], json!(false), "default must be false");
+
+    let resp = app
+        .client
+        .post(format!("{}/api/v1/walks", app.base_url))
+        .header("Authorization", format!("Bearer {host_token}"))
+        .json(&json!({ "with_dog": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 201);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["data"]["with_dog"], json!(true));
+    let session_id = body["data"]["id"].as_str().unwrap().to_owned();
+
+    let resp = app
+        .client
+        .post(format!("{}/api/v1/walks/{session_id}/stop", app.base_url))
+        .header("Authorization", format!("Bearer {host_token}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 204);
+
+    let resp = app
+        .client
+        .get(format!("{}/api/v1/me/walks", app.base_url))
+        .header("Authorization", format!("Bearer {host_token}"))
+        .send()
+        .await
+        .unwrap();
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let walk = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["session_id"] == json!(session_id))
+        .expect("stopped walk listed in history");
+    assert_eq!(walk["with_dog"], json!(true));
+}

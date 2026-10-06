@@ -213,7 +213,7 @@ pub async fn export(pool: &PgPool, user: Uuid) -> Result<serde_json::Value, AppE
     let walks = section(
         pool,
         "SELECT COALESCE(json_agg(t), '[]')::text FROM ( \
-            SELECT s.id AS session_id, s.host_id, s.status, s.is_open, \
+            SELECT s.id AS session_id, s.host_id, s.status, s.is_open, s.with_dog, \
                    s.started_at, s.ended_at, p.joined_at, p.left_at, \
                    p.total_meters, p.total_points \
             FROM walk_participants p \
