@@ -341,7 +341,7 @@ export function Walk() {
 
   const doAuth = async () => {
     if (busy) return
-    if (mode === 'signup' && !authTerms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
+    if (mode === 'signup' && !authTerms) { setError('Potwierdź, że masz ukończone 18 lat, i zaakceptuj regulamin oraz politykę prywatności.'); return }
     setBusy(true); setError(null)
     try {
       if (mode === 'signup') await register(email.trim(), pass, name.trim() || email.split('@')[0], authTerms)
@@ -841,7 +841,7 @@ export function Walk() {
                 {mode === 'signup' && (
                   <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted">
                     <input type="checkbox" checked={authTerms} onChange={(e) => setAuthTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]" />
-                    <span>Akceptuję <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
+                    <span>Mam ukończone 18 lat i akceptuję <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
                   </label>
                 )}
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}

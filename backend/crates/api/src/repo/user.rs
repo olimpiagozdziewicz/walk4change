@@ -15,7 +15,7 @@ pub struct UserAuthRow {
 
 /// Version of the terms/privacy documents the user accepts at sign-up.
 /// Bump when `regulamin.html` / `privacy.html` change materially.
-pub const TERMS_VERSION: &str = "2026-10-08";
+pub const TERMS_VERSION: &str = "2026-10-13";
 
 /// Insert a new user and their totals row in a single transaction.
 ///

@@ -34,7 +34,7 @@ export function Login() {
     setMagicMsg(null)
     if (!email || !pass) { setError('Podaj e-mail i hasło.'); return }
     if (tab === 'signup' && pass !== pass2) { setError('Hasła się nie zgadzają.'); return }
-    if (tab === 'signup' && !terms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
+    if (tab === 'signup' && !terms) { setError('Potwierdź, że masz ukończone 18 lat, i zaakceptuj regulamin oraz politykę prywatności.'); return }
     setLoading(true)
     try {
       if (tab === 'login') {
@@ -161,7 +161,7 @@ export function Login() {
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]"
                 />
                 <span>
-                  Akceptuję{' '}
+                  Mam ukończone 18 lat i akceptuję{' '}
                   <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a>
                   {' '}i{' '}
                   <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>{' '}
