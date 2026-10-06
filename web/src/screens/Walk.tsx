@@ -12,6 +12,8 @@ import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 import { watchPosition as watchGeoPosition, watchSteps, isNativeApp, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch, type StepWatch } from '../lib/geo'
 import { createStepGate, metersBetween, type StepGate, type LatLng } from '../lib/stepGate'
+import { createTraceRecorder, type TraceRecorder } from '../lib/walkTrace'
+import { deviceModel, shareWalkTrace } from '../lib/shareTrace'
 import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
@@ -139,6 +141,11 @@ export function Walk() {
   const [paused, setPaused] = useState(false)
   // Apka natywna bez czujnika/zgody — liczy z samego GPS; mówimy to wprost.
   const [stepFallback, setStepFallback] = useState(false)
+  // Zapis spaceru do zgłoszenia błędu (spec 2026-10-07): surowe kroki i fixy,
+  // odtwarzalne w testach przez tę samą bramkę. Żyje do „Nowy spacer”.
+  const traceRef = useRef<TraceRecorder | null>(null)
+  const [traceNote, setTraceNote] = useState('')
+  const [traceState, setTraceState] = useState<'idle' | 'open' | 'sent' | 'error'>('idle')
 
   // Lustrzane refy dla finalizacji przy odmontowaniu (cleanup efektu [] widzi
   // domknięcie z pierwszego renderu — stan byłby przeterminowany, refy nie).
@@ -592,6 +599,8 @@ export function Walk() {
     watchRef.current = watchGeoPosition(
       (fix) => {
         const acc = fix.accuracy
+        // Zapis przed filtrem dokładności — odtwarzanie stosuje ten sam próg.
+        traceRef.current?.fix(fix, acc ?? null, Date.now())
         // Drop poor-fix readings client-side: a wide accuracy radius drifts
         // several metres while standing still and would mint phantom points.
         // Note tylko przy realnej zmianie tekstu — bez spamu na każdy zły fix.
@@ -638,11 +647,14 @@ export function Walk() {
     const gen = ++stepGenRef.current
     if (!isNativeApp()) { stepModeRef.current = 'gps'; return }
     stepModeRef.current = 'pending'
+    if (!traceRef.current) traceRef.current = createTraceRecorder({ app: '', device: deviceModel() }, Date.now())
+    traceRef.current.mode('pending', Date.now())
     void watchSteps((total) => {
       if (gen !== stepGenRef.current) return
       const delta = total - lastStepTotalRef.current
       lastStepTotalRef.current = total
       if (delta <= 0) return
+      traceRef.current?.steps(delta, Date.now())
       gateRef.current?.onSteps(delta, Date.now())
       addSteps(delta)
       setPaused(false)
@@ -650,6 +662,7 @@ export function Walk() {
       // spacer już zamknięty albo czujnik wystartował ponownie
       if (gen !== stepGenRef.current || stepModeRef.current !== 'pending') { w?.stop(); return }
       stepWatchRef.current = w
+      traceRef.current?.mode(w ? 'gate' : 'gps', Date.now())
       if (w) {
         gateRef.current = createStepGate()
         stepModeRef.current = 'gate'
@@ -1055,7 +1068,53 @@ export function Walk() {
                   <ul className="mt-2 space-y-1">{leaderboard.slice(0, 5).map((r, i) => (<li key={r.user_id} className="flex items-center justify-between text-sm"><span className="text-ink">{i + 1}. {r.display_name}</span><span className="font-bold text-deep">{Math.round(parseFloat(r.total_points))}</span></li>))}</ul>
                 </Card>
               )}
-              <PrimaryButton onClick={() => setPhase('idle')} className="mt-4 w-full">Nowy spacer</PrimaryButton>
+              {isNativeApp() && (traceRef.current?.size() ?? 0) > 0 && (
+                <Card className="mt-4 p-4">
+                  {traceState === 'idle' && (
+                    <button type="button" onClick={() => setTraceState('open')} className="w-full text-left text-sm font-bold text-muted underline-offset-2 hover:underline">
+                      Coś nie tak z krokami, pauzą albo trasą? Wyślij zapis spaceru
+                    </button>
+                  )}
+                  {traceState === 'open' && (
+                    <>
+                      <label htmlFor="trace-note" className="text-sm font-bold text-ink">Co się działo?</label>
+                      <textarea
+                        id="trace-note"
+                        value={traceNote}
+                        onChange={(e) => setTraceNote(e.target.value)}
+                        maxLength={500}
+                        rows={3}
+                        placeholder="np. pauza włączała się, choć szłam"
+                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm text-ink"
+                      />
+                      <p className="mt-2 text-xs text-muted">Zapis zawiera kroki, czasy i trasę jako przesunięcia w metrach, bez adresu i współrzędnych. Sama wybierasz, komu go wyślesz.</p>
+                      <SoftButton
+                        className="mt-3 w-full"
+                        onClick={() => {
+                          const rec = traceRef.current
+                          if (!rec) return
+                          shareWalkTrace(rec, traceNote).then(() => setTraceState('sent'), () => setTraceState('error'))
+                        }}
+                      >
+                        Wyślij zapis
+                      </SoftButton>
+                    </>
+                  )}
+                  {traceState === 'sent' && <p className="text-sm font-bold text-[#2f7a45]">Dzięki, z zapisem odtworzymy Twój spacer krok po kroku.</p>}
+                  {traceState === 'error' && <p className="text-sm text-rose-600">Nie udało się przygotować pliku. Spróbuj jeszcze raz po następnym spacerze.</p>}
+                </Card>
+              )}
+              <PrimaryButton
+                onClick={() => {
+                  traceRef.current = null
+                  setTraceNote('')
+                  setTraceState('idle')
+                  setPhase('idle')
+                }}
+                className="mt-4 w-full"
+              >
+                Nowy spacer
+              </PrimaryButton>
             </motion.div>
           )}
         </AnimatePresence>
