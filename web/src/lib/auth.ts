@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+import { SITE_ORIGIN } from './site'
 import { API_BASE, apiRequest, getToken, hasBackend, setToken } from './http'
 
 const KEY = 'ss-auth'
@@ -109,11 +111,37 @@ export async function downloadMyData(): Promise<void> {
     headers: { Authorization: `Bearer ${getToken() ?? ''}` },
   })
   if (!res.ok) throw new Error('Eksport danych nie powiódł się. Spróbuj za chwilę.')
+  const filename = `seasteps-export-${new Date().toISOString().slice(0, 10)}.json`
+
+  // Natywna apka: WebView ignoruje <a download> — zapis do cache apki
+  // i systemowy arkusz udostępniania (zapis do Plików, mail, Dysk…).
+  if (Capacitor.isNativePlatform()) {
+    const text = await res.text()
+    const [{ Filesystem, Directory, Encoding }, { Share }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor/share'),
+    ])
+    const { uri } = await Filesystem.writeFile({
+      path: filename,
+      data: text,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    })
+    try {
+      await Share.share({ title: 'Eksport danych SeaSteps', files: [uri], dialogTitle: 'Zapisz lub wyślij eksport' })
+    } catch (e) {
+      // Zamknięcie arkusza bez wyboru to nie błąd eksportu.
+      const msg = e instanceof Error ? e.message.toLowerCase() : ''
+      if (!msg.includes('cancel')) throw e
+    }
+    return
+  }
+
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `seasteps-export-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -137,12 +165,34 @@ export async function logout(): Promise<void> {
 /** Send a Supabase magic-link email. Link returns to /auth/magic. */
 export async function requestMagicLink(email: string): Promise<void> {
   const { supabase } = await import('./supabase')
-  const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}auth/magic`
+  // natywna apka: App Link na stronę (https://seasteps.pl/app/auth/magic) przechwytywany przez apkę
+  const redirectTo = Capacitor.isNativePlatform()
+    ? `${SITE_ORIGIN}/app/auth/magic`
+    : `${window.location.origin}${import.meta.env.BASE_URL}auth/magic`
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim(),
     options: { emailRedirectTo: redirectTo },
   })
   if (error) throw error
+}
+
+/**
+ * Logowanie 8-cyfrowym kodem z maila (spec 2026-10-01) — niezawodna droga obok linku.
+ * verifyOtp zapisuje sesję Supabase, potem ta sama wymiana co po kliknięciu linku.
+ */
+export async function verifyMagicCode(email: string, code: string): Promise<void> {
+  const { supabase } = await import('./supabase')
+  const token = code.replace(/\s+/g, '')
+  const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' })
+  if (error) {
+    const msg = (error.message || '').toLowerCase()
+    throw new Error(
+      msg.includes('expired') || msg.includes('invalid')
+        ? 'Kod jest nieprawidłowy albo wygasł. Sprawdź cyfry lub wyślij nowy link.'
+        : 'Nie udało się zweryfikować kodu. Spróbuj ponownie.',
+    )
+  }
+  if (!(await exchangeSupabaseSession())) throw new Error('Nie udało się zalogować kodem. Spróbuj ponownie.')
 }
 
 /**

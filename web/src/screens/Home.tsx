@@ -103,14 +103,14 @@ export function Home() {
   const isTeam = mode === 'team'
 
   return (
-    <div className="px-5 pt-5">
+    <div className="px-5 pt-3 lg:pt-5">
       <motion.div {...fade(0)} className="flex items-center justify-between">
         <div className="lg:invisible">
-          <Logo />
+          <Logo compact />
         </div>
         <div className="flex items-center gap-2">
           <ModeToggle />
-          <Avatar name={profile?.name ?? ''} size={40} />
+          <Avatar name={profile?.name ?? ''} size={34} />
         </div>
       </motion.div>
 

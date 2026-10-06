@@ -1,0 +1,53 @@
+# Weryfikacja backendu Rust BEZ budowania/pushowania obrazu i BEZ deployu
+# (docker.yml odpala się tylko na push do main). Lokalnie nie ma cargo —
+# to jest jedyna ścieżka kompilacji gałęzi roboczych (2026-10-01).
+#
+# Zapytania SQL używają runtime `sqlx::query(...)` (bez makr query!), więc
+# kompilacja nie potrzebuje bazy ani `.sqlx`. `sqlx::migrate!` czyta tylko
+# pliki z backend/migrations. Testy integracyjne (tests/* z `mod common`)
+# wymagają Postgresa z PostGIS — tu uruchamiamy tylko testy jednostkowe
+# (lib + bins) i health_test.
+name: backend-check
+
+on:
+  push:
+    branches: ["android-play-*"]
+    paths: ["backend/**", ".github/workflows/backend-check.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CARGO_TERM_COLOR: always
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      # backend/rust-toolchain.toml: channel = "stable"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: cargo check
+        run: cargo check --workspace --all-targets
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets
+
+      - name: cargo test (unit, no DB)
+        run: cargo test --workspace --lib --bins && cargo test -p walk4change-api --test health_test

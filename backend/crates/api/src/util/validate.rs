@@ -47,9 +47,120 @@ pub fn check_optional_url(errors: &mut Vec<FieldError>, field: &str, value: Opti
     }
 }
 
+/// Prefiks publicznych URL-i Supabase Storage naszego projektu:
+/// `{SUPABASE_URL}/storage/v1/object/public/` + opcjonalnie `{bucket}/`
+/// (pusty `bucket` = dowolny bucket projektu).
+pub fn storage_public_prefix(supabase_url: &str, bucket: &str) -> String {
+    let base = format!(
+        "{}/storage/v1/object/public/",
+        supabase_url.trim().trim_end_matches('/')
+    );
+    if bucket.is_empty() {
+        base
+    } else {
+        format!("{base}{bucket}/")
+    }
+}
+
+/// Ścieżka obiektu za `prefix`, ale tylko „czysta”: niepuste segmenty
+/// `[A-Za-z0-9._-]`, bez `.`/`..`, bez `?`, `#`, `%` (audyt 2026-10-06, M1 —
+/// z dowolnego URL-a z `/eco-photos/` w środku dało się wyprowadzić ścieżkę
+/// cudzego pliku, który potem kasował service key przy usuwaniu konta).
+pub fn storage_object_path<'a>(url: &'a str, prefix: &str) -> Option<&'a str> {
+    let path = url.trim().strip_prefix(prefix)?;
+    let ok = !path.is_empty()
+        && path.split('/').all(|seg| {
+            !seg.is_empty()
+                && seg != "."
+                && seg != ".."
+                && seg
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        });
+    ok.then_some(path)
+}
+
+/// Jak [`check_optional_url`], ale URL musi wskazywać obiekt w NASZYM
+/// Supabase Storage (`prefix` z [`storage_public_prefix`]). Bez skonfigurowanego
+/// `SUPABASE_URL` (`prefix = None`) każdy niepusty URL jest odrzucany.
+pub fn check_optional_storage_url(
+    errors: &mut Vec<FieldError>,
+    field: &str,
+    value: Option<&str>,
+    prefix: Option<&str>,
+) {
+    if let Some(v) = value {
+        let t = v.trim();
+        if t.is_empty() {
+            return;
+        }
+        let ok = prefix.is_some_and(|p| storage_object_path(t, p).is_some());
+        if !ok {
+            errors.push(FieldError {
+                field: field.into(),
+                message: "must be an uploaded app photo URL".into(),
+                code: "INVALID_URL".into(),
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SB: &str = "https://abc.supabase.co";
+
+    #[test]
+    fn storage_prefix_shapes() {
+        assert_eq!(
+            storage_public_prefix("https://abc.supabase.co/", "eco-photos"),
+            "https://abc.supabase.co/storage/v1/object/public/eco-photos/"
+        );
+        assert_eq!(
+            storage_public_prefix(SB, ""),
+            "https://abc.supabase.co/storage/v1/object/public/"
+        );
+    }
+
+    #[test]
+    fn storage_path_accepts_own_uploads_only() {
+        let p = storage_public_prefix(SB, "eco-photos");
+        assert_eq!(
+            storage_object_path(&format!("{p}0f8e-11aa.jpg"), &p),
+            Some("0f8e-11aa.jpg")
+        );
+        assert_eq!(storage_object_path(&format!("{p}user/abc.jpg"), &p), Some("user/abc.jpg"));
+        // obcy host z `/eco-photos/` w ścieżce
+        assert_eq!(
+            storage_object_path("https://evil.example/x/eco-photos/victim.jpg", &p),
+            None
+        );
+        // inny bucket naszego projektu
+        assert_eq!(
+            storage_object_path(&format!("{SB}/storage/v1/object/public/other/a.jpg"), &p),
+            None
+        );
+        // traversal / kodowanie / query / puste segmenty
+        for bad in ["../a.jpg", "a/../b.jpg", "%2e%2e/a.jpg", "a.jpg?x=1", "a.jpg#f", "a//b.jpg", "", "a b.jpg"] {
+            assert_eq!(storage_object_path(&format!("{p}{bad}"), &p), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn optional_storage_url_rules() {
+        let p = storage_public_prefix(SB, "eco-photos");
+        let mut e = Vec::new();
+        check_optional_storage_url(&mut e, "u", None, Some(&p));
+        check_optional_storage_url(&mut e, "u", Some("  "), Some(&p));
+        check_optional_storage_url(&mut e, "u", Some(&format!("{p}a.jpg")), Some(&p));
+        assert!(e.is_empty());
+        check_optional_storage_url(&mut e, "u", Some("https://example.com/a.jpg"), Some(&p));
+        assert_eq!(e.len(), 1);
+        // bez SUPABASE_URL żaden URL nie przechodzi
+        check_optional_storage_url(&mut e, "u", Some(&format!("{p}a.jpg")), None);
+        assert_eq!(e.len(), 2);
+    }
 
     #[test]
     fn rejects_unsafe_url_schemes() {

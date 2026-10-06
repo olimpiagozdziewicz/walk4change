@@ -97,8 +97,9 @@ export class LiveSocket {
   }
 
   /** Wyślij ping GPS (dla realnego urządzenia / symulacji z przeglądarki). */
-  sendPing(sessionId: string, seq: number, lat: number, lng: number, accuracy?: number): void {
-    this.send({
+  /** Zwraca false, gdy gniazdo nie jest otwarte (ping nie poszedł). */
+  sendPing(sessionId: string, seq: number, lat: number, lng: number, accuracy?: number): boolean {
+    return this.send({
       type: 'ping',
       session_id: sessionId,
       seq,
@@ -114,9 +115,11 @@ export class LiveSocket {
     this.ws = null
   }
 
-  private send(obj: unknown): void {
+  private send(obj: unknown): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(obj))
+      return true
     }
+    return false
   }
 }

@@ -440,29 +440,44 @@ pub async fn kick(
     Ok(())
 }
 
+/// Gate odczytu sesji (detail/track): wiersz uczestnika musi istnieć i NIE
+/// może mieć `kicked_at` (audyt 2026-10-06, H1 — wyrzucony dalej odpytywał
+/// `/track` i widział pozycję hosta na żywo). `row` = `Some(kicked_at)` gdy
+/// aktor był kiedykolwiek uczestnikiem, `None` gdy nigdy. Obie odmowy → 403.
+fn ensure_not_kicked_member(row: Option<Option<DateTime<Utc>>>) -> Result<(), AppError> {
+    match row {
+        Some(None) => Ok(()),
+        _ => Err(AppError::Forbidden),
+    }
+}
+
+/// `kicked_at` aktora w sesji (`None` = nigdy nie był uczestnikiem).
+async fn member_kicked_at(
+    pool: &PgPool,
+    session_id: Uuid,
+    actor: Uuid,
+) -> Result<Option<Option<DateTime<Utc>>>, AppError> {
+    sqlx::query_scalar(
+        "SELECT kicked_at FROM walk_participants \
+         WHERE session_id = $1 AND user_id = $2",
+    )
+    .bind(session_id)
+    .bind(actor)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::internal)
+}
+
 /// Fetch full walk detail (session + participants) for a member.
 ///
-/// Returns 403 if `actor` has never been a participant (left or not).
+/// Returns 403 if `actor` has never been a participant (left or not) or was
+/// kicked by the host.
 pub async fn get(
     pool: &PgPool,
     session_id: Uuid,
     actor: Uuid,
 ) -> Result<WalkDetail, AppError> {
-    let is_member: bool = sqlx::query_scalar(
-        "SELECT EXISTS( \
-            SELECT 1 FROM walk_participants \
-            WHERE session_id = $1 AND user_id = $2 \
-        )",
-    )
-    .bind(session_id)
-    .bind(actor)
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::internal)?;
-
-    if !is_member {
-        return Err(AppError::Forbidden);
-    }
+    ensure_not_kicked_member(member_kicked_at(pool, session_id, actor).await?)?;
 
     let session: Option<WalkSession> = sqlx::query_as(
         "SELECT id, host_id, status, join_code, started_at, ended_at, is_open, open_note \
@@ -500,29 +515,23 @@ pub async fn get(
 
 /// Fetch ordered location pings for all participants in a session.
 ///
-/// Returns 403 if `actor` has never been a participant.
+/// Returns 403 if `actor` has never been a participant or was kicked.
 /// Results are ordered by `seq` and capped at `limit` rows.
+///
+/// Cudze punkty tylko z okna, w którym AKTOR był w sesji (audyt 2026-10-06,
+/// H1): `recorded_at` między jego `joined_at` a `COALESCE(left_at, now())`.
+/// Ktoś, kto dołącza późno do otwartego spaceru, nie dostaje startu hosta
+/// (zwykle spod domu). Liczy się `recorded_at` (kiedy punkt BYŁ w tym
+/// miejscu), nie `received_at` — offline'owe paczki wysłane po dołączeniu
+/// mają stary `recorded_at` i dalej są odfiltrowane. Własny ślad aktora
+/// zawsze w całości.
 pub async fn track(
     pool: &PgPool,
     session_id: Uuid,
     actor: Uuid,
     limit: i64,
 ) -> Result<Vec<PingPoint>, AppError> {
-    let is_member: bool = sqlx::query_scalar(
-        "SELECT EXISTS( \
-            SELECT 1 FROM walk_participants \
-            WHERE session_id = $1 AND user_id = $2 \
-        )",
-    )
-    .bind(session_id)
-    .bind(actor)
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::internal)?;
-
-    if !is_member {
-        return Err(AppError::Forbidden);
-    }
+    ensure_not_kicked_member(member_kicked_at(pool, session_id, actor).await?)?;
 
     // Clamp the client-supplied limit before it reaches SQL: a negative value
     // would error, and an unbounded value would let one request pull the
@@ -530,17 +539,23 @@ pub async fn track(
     let limit = limit.clamp(1, MAX_TRACK_LIMIT);
 
     let pings: Vec<PingPoint> = sqlx::query_as(
-        "SELECT user_id, seq, \
-                ST_Y(geom::geometry) AS lat, \
-                ST_X(geom::geometry) AS lng, \
-                points, recorded_at \
-         FROM location_pings \
-         WHERE session_id = $1 \
-         ORDER BY seq \
+        "SELECT lp.user_id, lp.seq, \
+                ST_Y(lp.geom::geometry) AS lat, \
+                ST_X(lp.geom::geometry) AS lng, \
+                lp.points, lp.recorded_at \
+         FROM location_pings lp \
+         JOIN walk_participants me \
+           ON me.session_id = lp.session_id AND me.user_id = $3 \
+         WHERE lp.session_id = $1 \
+           AND me.kicked_at IS NULL \
+           AND (lp.user_id = $3 \
+                OR lp.recorded_at BETWEEN me.joined_at AND COALESCE(me.left_at, now())) \
+         ORDER BY lp.seq \
          LIMIT $2",
     )
     .bind(session_id)
     .bind(limit)
+    .bind(actor)
     .fetch_all(pool)
     .await
     .map_err(AppError::internal)?;
@@ -694,4 +709,27 @@ pub async fn is_member(
     .map_err(AppError::internal)?;
 
     Ok(exists)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_or_left_member_passes_gate() {
+        assert!(ensure_not_kicked_member(Some(None)).is_ok());
+    }
+
+    #[test]
+    fn kicked_member_is_forbidden() {
+        assert!(matches!(
+            ensure_not_kicked_member(Some(Some(Utc::now()))),
+            Err(AppError::Forbidden)
+        ));
+    }
+
+    #[test]
+    fn non_member_is_forbidden() {
+        assert!(matches!(ensure_not_kicked_member(None), Err(AppError::Forbidden)));
+    }
 }

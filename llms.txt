@@ -15,6 +15,8 @@ SeaSteps zamienia spacer w grę: użytkownik zbiera punkty za kroki, a spacery z
 
 Olimpia Goździewicz — https://olimpiagozdziewicz.pl/ (opis projektu także na jej blogu: https://olimpiagozdziewicz.pl/blog/pierwszy-hackathon-seasteps.html).
 
+Usługodawca i administrator danych (od 8 października 2026): 963 sp. z o.o., ul. Aleksandra Gryglewskiego 6 lok. 8, 80-303 Gdańsk, KRS: 0001214277, NIP: 5842878792, REGON: 543615988.
+
 ## Kontakt
 
 - E-mail: admin@seasteps.pl

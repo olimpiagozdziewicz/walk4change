@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { siteUrl } from '../lib/site'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { motion } from 'motion/react'
 import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit, EnvelopeSimple, DownloadSimple, Trash, Warning } from '@phosphor-icons/react'
 import { Card, Pill, PrimaryButton } from '../components/ui'
@@ -426,24 +428,28 @@ export function Profile() {
           </>
         )}
 
-        {/* instalacja PWA — stały dostęp dla osób, które kiedyś usunęły aplikację */}
-        <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Aplikacja</h2>
-        <Card className="flex items-center gap-3 p-3.5">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sea/10 text-sea">
-            <DownloadSimple size={18} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-ink">Zainstaluj SeaSteps</div>
-            <div className="text-xs text-muted">Dodaj aplikację znowu na ekran telefonu.</div>
-          </div>
-          <button
-            type="button"
-            onClick={showInstallModal}
-            className="shrink-0 rounded-full bg-sea/10 px-3 py-1.5 text-xs font-bold text-deep transition active:scale-95"
-          >
-            Zainstaluj
-          </button>
-        </Card>
+        {!Capacitor.isNativePlatform() && (
+          <>
+            {/* instalacja PWA — stały dostęp dla osób, które kiedyś usunęły aplikację */}
+            <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Aplikacja</h2>
+            <Card className="flex items-center gap-3 p-3.5">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sea/10 text-sea">
+                <DownloadSimple size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-ink">Zainstaluj SeaSteps</div>
+                <div className="text-xs text-muted">Dodaj aplikację znowu na ekran telefonu.</div>
+              </div>
+              <button
+                type="button"
+                onClick={showInstallModal}
+                className="shrink-0 rounded-full bg-sea/10 px-3 py-1.5 text-xs font-bold text-deep transition active:scale-95"
+              >
+                Zainstaluj
+              </button>
+            </Card>
+          </>
+        )}
 
         {/* konto: RODO — eksport + usunięcie (spec 2026-07-13) */}
         <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Twoje dane</h2>
@@ -474,6 +480,7 @@ export function Profile() {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-bold text-ink">Usuń konto</div>
               <div className="text-xs text-muted">Nieodwracalne: trasy GPS, wiadomości i profil znikną.</div>
+              <a href={siteUrl('/usun-konto.html')} target="_blank" rel="noopener" className="text-xs font-bold text-sea underline">Jak usunąć konto</a>
             </div>
             <button
               type="button"
@@ -539,11 +546,11 @@ export function Profile() {
         </button>
 
         <p className="mt-4 text-center text-xs text-muted">
-          <a href="/regulamin.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
+          <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Regulamin
           </a>
           {' · '}
-          <a href="/privacy.html" target="_blank" rel="noopener" className="underline transition hover:text-sea">
+          <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="underline transition hover:text-sea">
             Polityka Prywatności
           </a>
         </p>

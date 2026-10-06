@@ -1,12 +1,16 @@
 import { useState } from 'react'
+import { siteUrl } from '../lib/site'
+import { Capacitor } from '@capacitor/core'
 import { useNavigate } from 'react-router-dom'
 import { Envelope, Lock, ArrowRight, Footprints, Leaf, UsersThree, Warning, DownloadSimple } from '@phosphor-icons/react'
 import { Logo } from '../components/Logo'
 import { FootstepTrail } from '../components/Footsteps'
 import { showInstallModal } from '../components/InstallModal'
-import { login, register, requestMagicLink } from '../lib/auth'
+import { login, register, requestMagicLink, verifyMagicCode } from '../lib/auth'
 
 type Tab = 'login' | 'signup'
+
+const IS_NATIVE = Capacitor.isNativePlatform()
 
 export function Login() {
   const nav = useNavigate()
@@ -22,13 +26,15 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [magicMsg, setMagicMsg] = useState<string | null>(null)
   const [terms, setTerms] = useState(false)
+  const [magicSent, setMagicSent] = useState(false)
+  const [code, setCode] = useState('')
 
   const submit = async () => {
     setError(null)
     setMagicMsg(null)
     if (!email || !pass) { setError('Podaj e-mail i hasło.'); return }
     if (tab === 'signup' && pass !== pass2) { setError('Hasła się nie zgadzają.'); return }
-    if (tab === 'signup' && !terms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
+    if (tab === 'signup' && !terms) { setError('Potwierdź, że masz ukończone 18 lat, i zaakceptuj regulamin oraz politykę prywatności.'); return }
     setLoading(true)
     try {
       if (tab === 'login') {
@@ -36,7 +42,7 @@ export function Login() {
       } else {
         await register(email, pass, email.split('@')[0], terms)
       }
-      nav('/')
+      nav('/', { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Błąd logowania.')
     } finally {
@@ -53,8 +59,24 @@ export function Login() {
     try {
       await requestMagicLink(email)
       setMagicMsg(`✓ Sprawdź skrzynkę — magiczny link poszedł na ${email.trim()}.`)
+      setMagicSent(true)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Nie udało się wysłać magicznego linku.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submitCode = async () => {
+    if (loading) return
+    if (!/^\d{8}$/.test(code.replace(/\s+/g, ''))) { setError('Kod ma 8 cyfr.'); return }
+    setError(null)
+    setLoading(true)
+    try {
+      await verifyMagicCode(email, code)
+      nav('/', { replace: true })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Nie udało się zalogować kodem.')
     } finally {
       setLoading(false)
     }
@@ -139,10 +161,10 @@ export function Login() {
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]"
                 />
                 <span>
-                  Akceptuję{' '}
-                  <a href="/regulamin.html" target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a>
+                  Mam ukończone 18 lat i akceptuję{' '}
+                  <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a>
                   {' '}i{' '}
-                  <a href="/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>{' '}
+                  <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>{' '}
                   SeaSteps.
                 </span>
               </label>
@@ -171,18 +193,48 @@ export function Login() {
             albo wyślij magiczny link →
           </button>
           {magicMsg && <p className="mt-2 text-center text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
-          <button
-            type="button"
-            onClick={showInstallModal}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-sea/20 bg-sea/8 py-3 text-sm font-bold text-deep transition active:scale-[0.98]"
-          >
-            <DownloadSimple size={16} /> Zainstaluj aplikację na telefonie
-          </button>
+          {magicSent && (
+            <div className="mt-3">
+              <label htmlFor="magic-code" className="mb-1 block text-center text-xs font-semibold text-muted">
+                Wpisz 8-cyfrowy kod z maila
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="magic-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/[^\d\s]/g, '').slice(0, 9))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={9}
+                  placeholder="00000000"
+                  className="min-w-0 flex-1 rounded-2xl border border-sea/20 bg-white px-4 py-3 text-center text-lg font-bold tracking-widest text-ink outline-none focus:border-sea"
+                />
+                <button
+                  type="button"
+                  onClick={submitCode}
+                  disabled={loading}
+                  className="shrink-0 rounded-2xl bg-sea px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  Zaloguj kodem
+                </button>
+              </div>
+            </div>
+          )}
+          {/* apka natywna: bez instalacji PWA (spec 2026-10-01) */}
+          {!IS_NATIVE && (
+            <button
+              type="button"
+              onClick={showInstallModal}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-sea/20 bg-sea/8 py-3 text-sm font-bold text-deep transition active:scale-[0.98]"
+            >
+              <DownloadSimple size={16} /> Zainstaluj aplikację na telefonie
+            </button>
+          )}
           <p className="mt-3 text-center text-[11px] leading-snug text-muted">
             Logując się, akceptujesz{' '}
-            <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a>
+            <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="underline">regulamin</a>
             {' '}i{' '}
-            <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
+            <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
           </p>
         </div>
       </div>

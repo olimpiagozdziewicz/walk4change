@@ -1,0 +1,6 @@
+# SeaSteps (pl.seasteps.app, seasteps.pl) - 963 sp. z o.o., Gdansk, KRS 0001214277
+Contact: mailto:admin@seasteps.pl
+Expires: 2027-09-30T22:00:00.000Z
+Preferred-Languages: pl, en
+Policy: https://seasteps.pl/bezpieczenstwo.html
+Canonical: https://seasteps.pl/.well-known/security.txt

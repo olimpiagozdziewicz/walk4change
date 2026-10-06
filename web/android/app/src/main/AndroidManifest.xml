@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -22,6 +26,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App Links: magic link (spec 2026-10-01); tylko ten path, nie cały /app/ -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="seasteps.pl" android:pathPrefix="/app/auth/magic" />
+            </intent-filter>
+
+            <!-- App Links: dołączenie do spaceru z kodu QR (spec 2026-10-05) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="seasteps.pl" android:path="/app/walk" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -33,9 +53,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Usługa GPS pluginu ma w swoim manifeście exported="true": każda inna
+             apka mogła się do niej podpiąć, a jej onUnbind zatrzymywał śledzenie
+             spaceru (przegląd 06.10). Apka wiąże się z nią sama, z zewnątrz nie trzeba. -->
+        <service
+            android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService"
+            android:exported="false"
+            tools:replace="android:exported" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Czujnik kroków: apka wie, czy idziesz (spec 2026-10-06). Bez czujnika
+         działa dalej na samym GPS, więc nie odcinamy telefonów w Google Play. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <!-- Plugin wymaga sprzętowego GPS; tablety/telefony z lokalizacją sieciową też
+         mogą liczyć spacer, więc nie odcinamy ich w Google Play. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" tools:replace="android:required" />
 </manifest>

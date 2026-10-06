@@ -1,5 +1,10 @@
 import { useEffect } from 'react'
-import { Routes, Route, Outlet, useLocation, Navigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom'
+import { App as CapApp } from '@capacitor/app'
+import { initAppLinks } from './lib/appLinks'
+import { isWalkActive, WALK_LEAVE_CONFIRM } from './lib/walkGuard'
+import { hasPendingJoin, loadActiveWalk, normalizeJoinCode, setPendingJoin } from './lib/activeWalk'
 import { isAuthed, setAuthed } from './lib/auth'
 import { getToken } from './lib/http'
 import { AppShell } from './components/AppShell'
@@ -16,6 +21,52 @@ import { Partners } from './screens/Partners'
 import { MagicVerify } from './screens/MagicVerify'
 import { VerifyEmail } from './screens/VerifyEmail'
 import { InstallModal } from './components/InstallModal'
+
+// Link z QR (…/walk?join=KOD) — kod zapamiętujemy synchronicznie przy starcie,
+// zanim RequireAuth przekieruje niezalogowanego na /login i zgubi query.
+;(() => {
+  try {
+    const u = new URL(window.location.href)
+    const code = normalizeJoinCode(u.searchParams.get('join'))
+    if (code && u.pathname.replace(/\/$/, '').endsWith('/walk')) setPendingJoin(code)
+  } catch { /* ignore */ }
+})()
+
+/** Aktywny spacer albo kod z QR → ekran Spacer (też po zalogowaniu). */
+function WalkRedirect() {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (pathname === '/walk' || !isAuthed() || !getToken()) return
+    if (hasPendingJoin() || loadActiveWalk()) navigate('/walk', { replace: true })
+  }, [pathname, navigate])
+  return null
+}
+
+/**
+ * Systemowe „wstecz” w apce Android. Bez tego Capacitor robi webView.goBack():
+ * w trakcie spaceru wychodził z ekranu i kończył spacer bez pytania, a na
+ * ekranie głównym nic nie robił (apki nie dało się zamknąć gestem).
+ */
+function AndroidBackButton() {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let handle: { remove: () => Promise<void> } | null = null
+    let removed = false
+    CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (pathname === '/' || pathname === '/login' || !canGoBack) { void CapApp.minimizeApp(); return }
+      if (isWalkActive()) {
+        // Spacer trwa w tle także po zminimalizowaniu — „wstecz” go nie kończy.
+        if (!window.confirm(WALK_LEAVE_CONFIRM)) return
+      }
+      navigate(-1)
+    }).then((h) => { if (removed) void h.remove(); else handle = h })
+    return () => { removed = true; void handle?.remove() }
+  }, [pathname, navigate])
+  return null
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -43,9 +94,13 @@ function AppLayout() {
 }
 
 function App() {
+  const navigate = useNavigate()
+  useEffect(() => initAppLinks((to) => navigate(to)), [navigate])
   return (
     <>
     <ScrollToTop />
+    <WalkRedirect />
+    <AndroidBackButton />
     <Routes>
       {/* logowanie / zakładanie konta — pełny ekran, bez shellu */}
       <Route path="/login" element={<Login />} />
@@ -69,7 +124,7 @@ function App() {
       </Route>
       </Route>
     </Routes>
-    <InstallModal />
+    {!Capacitor.isNativePlatform() && <InstallModal />}
     </>
   )
 }

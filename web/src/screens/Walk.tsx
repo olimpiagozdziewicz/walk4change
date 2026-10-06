@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { siteUrl } from '../lib/site'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { Play, Square, UsersThree, Leaf, Trophy, Footprints, MapPin, SignIn, Copy, CheckCircle, HandHeart, ThumbsUp, ThumbsDown } from '@phosphor-icons/react'
@@ -9,11 +10,14 @@ import { RealMap } from '../components/RealMap'
 import { apiRequest, hasBackend, getToken, ApiError } from '../lib/http'
 import { login, register, currentUserId, requestMagicLink } from '../lib/auth'
 import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
-import { watchPosition as watchGeoPosition, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch } from '../lib/geo'
+import { watchPosition as watchGeoPosition, watchSteps, isNativeApp, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch, type StepWatch } from '../lib/geo'
+import { createStepGate, metersBetween, type StepGate, type LatLng } from '../lib/stepGate'
 import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
 import { setWalkActive } from '../lib/walkGuard'
+import { saveActiveWalk, loadActiveWalk, clearActiveWalk, takePendingJoin, PENDING_JOIN_EVENT, type ActiveWalk } from '../lib/activeWalk'
+import { JoinQr } from '../components/JoinQr'
 
 const COLORS = ['#0f8b8d', '#e26d5c', '#7b6cf0', '#f2a541', '#58b86c']
 
@@ -23,6 +27,15 @@ const WS_RECONNECT_MAX_MS = 8000
 
 const GPS_SEARCHING_NOTE = 'Szukam pozycji GPS… (zezwól na lokalizację)'
 const GPS_WEAK_SIGNAL_NOTE = 'Słaby sygnał GPS — szukam dokładniejszej pozycji…'
+const JOIN_LINK_CONFIRM = 'Dołączyć do spaceru z tego linku?\n\nPodczas spaceru Twoja pozycja będzie widoczna na żywo dla jego uczestników. Dołączaj tylko do osób, które znasz.'
+
+// Tryb czujnika kroków (spec 2026-10-06): ping, gdy pozycja po bramce kroków
+// przesunęła się co najmniej tyle (powyżej progu serwera 5 m — wolny spacer
+// nie gubi metrów), a w bezruchu ping kontrolny w tym samym miejscu (obecność
+// dla mnożnika „razem”, serwer liczy mu 0 m). Odstęp min. > limit serwera 1 s.
+const GATE_SEND_MIN_M = 6
+const GATE_HEARTBEAT_MS = 15_000
+const GATE_MIN_INTERVAL_MS = 1100
 
 type Phase = 'auth' | 'idle' | 'active' | 'summary'
 
@@ -98,6 +111,10 @@ export function Walk() {
   const watchRef = useRef<GeoWatch | null>(null)
   const [disclosureFor, setDisclosureFor] = useState<string | null>(null)
   const lastSentRef = useRef(0)
+  // Ostatni dobry fix, którego nie dało się wysłać (WS zerwany) — idzie od razu
+  // po ponownym połączeniu. Kolejka nie ma sensu: serwer bierze ping ≤45 s.
+  const pendingFixRef = useRef<{ lat: number; lng: number; acc?: number } | null>(null)
+  const joinCodeRef = useRef<string | null>(null)
   // WS reconnect-with-backoff: `closedByClientRef` różni celowe zamknięcie
   // (stop/leave ekranu) od zerwania sieci — tylko wtedy odpalamy retry.
   const closedByClientRef = useRef(false)
@@ -105,7 +122,19 @@ export function Walk() {
   const reconnectAttemptRef = useRef(0)
   const [stopping, setStopping] = useState(false)
   const [summary, setSummary] = useState<{ points: number; meters: number; steps: number; together: boolean; nature: boolean } | null>(null)
-  const { steps, permissionNeeded, requestPermission, addMeters, reset: resetSteps } = useStepCounter()
+  const { steps, source: stepSource, permissionNeeded, requestPermission, addMeters, addSteps, reset: resetSteps } = useStepCounter()
+  // Czujnik kroków: 'pending' = apka czeka na odpowiedź czujnika (fixów nie
+  // wysyła, żeby surowy GPS nie wpadł przed bramką), 'gate' = bramka kroków,
+  // 'gps' = dotychczasowe liczenie z samego GPS (przeglądarka / brak czujnika).
+  const stepModeRef = useRef<'pending' | 'gate' | 'gps'>('gps')
+  const gateRef = useRef<StepGate | null>(null)
+  const stepWatchRef = useRef<StepWatch | null>(null)
+  const lastStepTotalRef = useRef(0)
+  const lastSentPosRef = useRef<LatLng | null>(null)
+  const stepGenRef = useRef(0)
+  const [paused, setPaused] = useState(false)
+  // Apka natywna bez czujnika/zgody — liczy z samego GPS; mówimy to wprost.
+  const [stepFallback, setStepFallback] = useState(false)
 
   // Lustrzane refy dla finalizacji przy odmontowaniu (cleanup efektu [] widzi
   // domknięcie z pierwszego renderu — stan byłby przeterminowany, refy nie).
@@ -175,6 +204,10 @@ export function Walk() {
       if (startedAtRef.current != null) {
         setSec(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
       }
+      // Auto-pauza: bramka kroków bez kroków od 6 s (GPS przy bezruchu
+      // może w ogóle nie dawać fixów, więc sprawdzamy tu, nie w handlerze fixa).
+      const gate = gateRef.current
+      setPaused(gate != null && !gate.isMoving(Date.now()))
     }
     tick()
     timer.current = window.setInterval(tick, 1000)
@@ -246,6 +279,7 @@ export function Walk() {
       routeSeed: Math.abs(Math.round((mine?.meters ?? 0) * 1000)) || Date.now() % 100000,
       photos: [],
     })
+    clearActiveWalk()
     void Promise.allSettled([
       apiRequest(`/walks/${sid}/stop`, { method: 'POST' }),
       apiRequest(`/walks/${sid}/leave`, { method: 'POST' }),
@@ -279,7 +313,19 @@ export function Walk() {
       nature: parseFloat(p.nature_mult),
       isMe: p.user_id === currentUserId(),
     })
-    if (p.user_id === currentUserId()) addMeters(seg)
+    if (p.user_id === currentUserId()) {
+      addMeters(seg)
+      const mineNow = map.get(p.user_id)!
+      if (startedAtRef.current != null) {
+        saveActiveWalk({
+          sessionId: p.session_id,
+          joinCode: joinCodeRef.current,
+          startedAt: startedAtRef.current,
+          meters: mineNow.meters,
+          points: mineNow.points,
+        })
+      }
+    }
     flush()
   }
 
@@ -295,7 +341,7 @@ export function Walk() {
 
   const doAuth = async () => {
     if (busy) return
-    if (mode === 'signup' && !authTerms) { setError('Zaakceptuj regulamin i politykę prywatności, aby założyć konto.'); return }
+    if (mode === 'signup' && !authTerms) { setError('Potwierdź, że masz ukończone 18 lat, i zaakceptuj regulamin oraz politykę prywatności.'); return }
     setBusy(true); setError(null)
     try {
       if (mode === 'signup') await register(email.trim(), pass, name.trim() || email.split('@')[0], authTerms)
@@ -347,7 +393,20 @@ export function Walk() {
     const sock = new LiveSocket({
       // Reconnect (backoff) i powrót z tła współdzielą tę samą ścieżkę:
       // po (ponownym) otwarciu zawsze auth + subscribe od nowa.
-      onOpen: () => { reconnectAttemptRef.current = 0; sock.subscribeSession(id); sock.subscribeLeaderboard() },
+      onOpen: () => {
+        reconnectAttemptRef.current = 0
+        sock.subscribeSession(id)
+        sock.subscribeLeaderboard()
+        const f = pendingFixRef.current
+        if (f) {
+          seqRef.current += 1
+          if (sock.sendPing(id, seqRef.current, f.lat, f.lng, f.acc)) {
+            pendingFixRef.current = null
+            lastSentRef.current = Date.now()
+            lastSentPosRef.current = { lat: f.lat, lng: f.lng }
+          }
+        }
+      },
       onPingScored: onPing,
       onLeaderboard,
       onError: (m) => setError(m),
@@ -363,14 +422,32 @@ export function Walk() {
     return sock
   }
 
-  const connectAndStream = (id: string, startedAtIso?: string) => {
+  const connectAndStream = (id: string, startedAtIso?: string, code: string | null = null, resume?: ActiveWalk) => {
     closedByClientRef.current = false
     reconnectAttemptRef.current = 0
     clearReconnectTimer()
     socketRef.current?.close()
-    walkersRef.current = new Map(); flush()
-    seqRef.current = 0; setSec(0); setSummary(null); resetSteps(); setMyTrack([])
+    walkersRef.current = new Map()
+    // Wznowienie: seq musi być większy niż wszystko, co ta sesja już wysłała —
+    // serwer odrzuca powtórzony (session,user,seq) po cichu, więc po zabiciu
+    // apki spacer stałby w miejscu. Pingów nie wysyłamy częściej niż ~1/s,
+    // więc dwa na sekundę od startu to bezpieczny zapas (bez zapisu seq).
+    seqRef.current = resume ? Math.max(0, Math.floor((Date.now() - resume.startedAt) / 500)) : 0
+    setSec(0); setSummary(null); resetSteps(); setMyTrack([])
+    pendingFixRef.current = null
+    joinCodeRef.current = code
     setStopping(false)
+    // Wznowienie po zabiciu procesu: moje metry/punkty/kroki z zapisu, żeby
+    // licznik nie startował od zera (serwer i tak trzyma sumę punktów).
+    const myId = currentUserId()
+    if (resume && myId) {
+      walkersRef.current.set(myId, {
+        userId: myId, name: nameFor(myId), color: COLORS[0], trail: [],
+        points: resume.points, meters: resume.meters, together: 1, nature: 1, isMe: true,
+      })
+      addMeters(resume.meters)
+    }
+    flush()
     // Nowa sesja spaceru — ustawiane raz, tu, nie w efekcie na każdy render,
     // żeby przetrwać re-rendery (patrz komentarz przy deklaracji ref).
     // startedAtIso (POST /walks dla hosta) jest autorytatywny od razu; gdy
@@ -378,7 +455,8 @@ export function Walk() {
     // zastępca — walkDetail-polling effect nadpisze go server-side wartością
     // przy pierwszym pobraniu (leci natychmiast po aktywacji).
     const parsedStart = startedAtIso ? Date.parse(startedAtIso) : NaN
-    startedAtRef.current = Number.isNaN(parsedStart) ? Date.now() : parsedStart
+    startedAtRef.current = resume ? resume.startedAt : Number.isNaN(parsedStart) ? Date.now() : parsedStart
+    saveActiveWalk(resume ?? { sessionId: id, joinCode: code, startedAt: startedAtRef.current, meters: 0, points: 0 })
     socketRef.current = makeSock(id)
     startGps(id)
     setPhase('active')
@@ -400,7 +478,50 @@ export function Walk() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, searchParams])
 
-  // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
+  // Start ekranu: (1) wznowienie spaceru przerwanego zabiciem apki w tle,
+  // (2) dołączenie z linku/QR (…/walk?join=KOD). Raz, w fazie idle.
+  const bootRef = useRef(false)
+  useEffect(() => {
+    if (phase !== 'idle' || bootRef.current) return
+    bootRef.current = true
+    const saved = loadActiveWalk()
+    if (saved) {
+      const resume = () => {
+        if (phaseRef.current !== 'idle') return // w międzyczasie ruszył inny spacer
+        setSessionId(saved.sessionId); setJoinCode(saved.joinCode)
+        connectAndStream(saved.sessionId, undefined, saved.joinCode, saved)
+      }
+      const myId = currentUserId()
+      api.getWalkDetail(saved.sessionId).then(
+        (d) => {
+          const meP = d.participants.find((p) => p.userId === myId)
+          if (d.status === 'active' && meP && !meP.leftAt) resume()
+          else clearActiveWalk()
+        },
+        // brak sieci — wznawiamy optymistycznie; „Zakończ spacer” zawsze domyka
+        resume,
+      )
+      return
+    }
+    const code = takePendingJoin()
+    if (code) { setCodeInput(code); void joinWalk(code) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  // QR zeskanowany, gdy ekran Spacer już jest otwarty: efekt startowy wyżej
+  // odpala się raz, więc nowy kod z App Linka przychodzi zdarzeniem.
+  useEffect(() => {
+    if (phase !== 'idle') return
+    const onJoin = () => {
+      const code = takePendingJoin()
+      if (code) { setCodeInput(code); void joinWalk(code) }
+    }
+    window.addEventListener(PENDING_JOIN_EVENT, onJoin)
+    return () => window.removeEventListener(PENDING_JOIN_EVENT, onJoin)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+    // Re-connect WS when app returns to foreground mid-walk (dzieli entry point
   // z pętlą backoff powyżej — patrz reconnectSocket).
   useEffect(() => {
     if (phase !== 'active') return
@@ -431,7 +552,7 @@ export function Walk() {
       })
       if (!res.data) throw new Error('no session')
       setSessionId(res.data.id); setJoinCode(res.data.join_code); setCodeInput('')
-      connectAndStream(res.data.id, res.data.started_at)
+      connectAndStream(res.data.id, res.data.started_at, res.data.join_code)
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED'
@@ -441,16 +562,19 @@ export function Walk() {
     } finally { setBusy(false) }
   }
 
-  const joinWalk = async () => {
+  const joinWalk = async (fromLink?: string) => {
     if (busy) return
-    const code = codeInput.trim().toUpperCase()
+    const code = (fromLink ?? codeInput).trim().toUpperCase()
     if (!code) return
+    // Link/QR mógł przysłać ktokolwiek — dołączenie udostępnia pozycję na żywo,
+    // więc przy linku pytamy (wpisany ręcznie kod = świadoma decyzja).
+    if (fromLink && !window.confirm(JOIN_LINK_CONFIRM)) return
     setBusy(true); setError(null)
     try {
       const res = await apiRequest<{ session_id: string }>('/walks/join-by-code', { method: 'POST', body: { code } })
       if (!res.data?.session_id) throw new Error('bad code')
       setSessionId(res.data.session_id); setJoinCode(code)
-      connectAndStream(res.data.session_id)
+      connectAndStream(res.data.session_id, undefined, code)
     } catch { setError('Nie znaleziono spaceru o tym kodzie (musi być aktywny).') } finally { setBusy(false) }
   }
 
@@ -471,6 +595,8 @@ export function Walk() {
           return
         }
         setGpsNote((prev) => (prev === null ? prev : null))
+        if (stepModeRef.current === 'pending') return
+        if (stepModeRef.current === 'gate') { onGatedFix(id, fix, acc); return }
         const { lat, lng } = fix
         // Ślad na mapę live — niezależny od throttle'u wysyłki pingów poniżej,
         // bo tylko rysuje trasę i nie wpływa na punktację (tę liczy serwer).
@@ -479,12 +605,98 @@ export function Walk() {
         // ~4 s cadence so genuine walking (>~1 m/s) clears the server's 5 m
         // jitter deadband, while stationary drift stays under it.
         if (now - lastSentRef.current < 4000) return
-        lastSentRef.current = now
         seqRef.current += 1
-        socketRef.current?.sendPing(id, seqRef.current, lat, lng, acc ?? undefined)
+        const sent = socketRef.current?.sendPing(id, seqRef.current, lat, lng, acc ?? undefined) ?? false
+        if (sent) {
+          lastSentRef.current = now
+          pendingFixRef.current = null
+        } else {
+          pendingFixRef.current = { lat, lng, acc: acc ?? undefined }
+        }
       },
       (message) => setGpsNote(message),
     )
+    // Po watchGeoPosition: to ono pyta o zgody (też „Aktywność fizyczna”),
+    // a czujnik musi poczekać na odpowiedź — inaczej przy pierwszym spacerze
+    // startuje bez zgody i spacer po cichu wraca do samego GPS.
+    startStepGate()
+  }
+
+  // ── czujnik kroków + bramka (spec 2026-10-06-czujnik-krokow-auto-pauza) ──
+  const startStepGate = () => {
+    stepWatchRef.current?.stop(); stepWatchRef.current = null
+    gateRef.current = null
+    lastSentPosRef.current = null
+    lastStepTotalRef.current = 0
+    setPaused(false)
+    setStepFallback(false)
+    const gen = ++stepGenRef.current
+    if (!isNativeApp()) { stepModeRef.current = 'gps'; return }
+    stepModeRef.current = 'pending'
+    void watchSteps((total) => {
+      if (gen !== stepGenRef.current) return
+      const delta = total - lastStepTotalRef.current
+      lastStepTotalRef.current = total
+      if (delta <= 0) return
+      gateRef.current?.onSteps(delta, Date.now())
+      addSteps(delta)
+      setPaused(false)
+    }).then((w) => {
+      // spacer już zamknięty albo czujnik wystartował ponownie
+      if (gen !== stepGenRef.current || stepModeRef.current !== 'pending') { w?.stop(); return }
+      stepWatchRef.current = w
+      if (w) {
+        gateRef.current = createStepGate()
+        stepModeRef.current = 'gate'
+        addSteps(0) // kroki od teraz z czujnika
+      } else {
+        stepModeRef.current = 'gps'
+        setStepFallback(true)
+      }
+    })
+  }
+
+  const sendGatedPing = (id: string, p: LatLng, acc: number | null, now: number) => {
+    seqRef.current += 1
+    const sent = socketRef.current?.sendPing(id, seqRef.current, p.lat, p.lng, acc ?? undefined) ?? false
+    if (sent) {
+      lastSentRef.current = now
+      lastSentPosRef.current = p
+      pendingFixRef.current = null
+    } else {
+      pendingFixRef.current = { lat: p.lat, lng: p.lng, acc: acc ?? undefined }
+    }
+  }
+
+  const onGatedFix = (id: string, fix: LatLng, acc: number | null) => {
+    const gate = gateRef.current
+    if (!gate) return
+    const now = Date.now()
+    const pos = gate.onFix(fix, now)
+    // Mapa rysuje pozycję po bramce — bez zygzaków dryfu, gdy stoisz.
+    setMyTrack((prev) => {
+      const last = prev[prev.length - 1]
+      return last && metersBetween(last, pos) < 1 ? prev : [...prev, pos].slice(-500)
+    })
+    const lastPos = lastSentPosRef.current
+    if (!lastPos) { sendGatedPing(id, pos, acc, now); return }
+    const since = now - lastSentRef.current
+    if (since < GATE_MIN_INTERVAL_MS) return
+    if (metersBetween(lastPos, pos) >= GATE_SEND_MIN_M) sendGatedPing(id, pos, acc, now)
+    else if (since >= GATE_HEARTBEAT_MS) sendGatedPing(id, lastPos, acc, now)
+  }
+
+  // „Nie teraz” w oknie o lokalizacji: spacer bez GPS nie ma sensu (licznik
+  // leciałby, a trasa nie), więc go anulujemy zamiast zostawiać „żywą” sesję.
+  const cancelWalkWithoutGps = (id: string) => {
+    stopStreaming()
+    clearActiveWalk()
+    setPhase('idle')
+    setError('Spacer anulowany — bez lokalizacji nie policzymy trasy ani punktów.')
+    void Promise.allSettled([
+      apiRequest(`/walks/${id}/stop`, { method: 'POST' }),
+      apiRequest(`/walks/${id}/leave`, { method: 'POST' }),
+    ])
   }
 
   const stopStreaming = () => {
@@ -493,6 +705,9 @@ export function Walk() {
     closedByClientRef.current = true
     clearReconnectTimer()
     watchRef.current?.stop(); watchRef.current = null
+    stepWatchRef.current?.stop(); stepWatchRef.current = null
+    stepGenRef.current += 1
+    stepModeRef.current = 'gps'; gateRef.current = null
     socketRef.current?.close(); socketRef.current = null
     if (timer.current) window.clearInterval(timer.current)
   }
@@ -530,6 +745,7 @@ export function Walk() {
         photos: [],
       })
     }
+    clearActiveWalk()
     stopStreaming()
     // Podsumowanie jest liczone lokalnie — pokazujemy je od razu, a stop/leave
     // (nieistotne dla UI, każde już wcześniej best-effort) lecą w tle
@@ -569,16 +785,23 @@ export function Walk() {
               <span className="font-display text-lg font-bold">Lokalizacja podczas spaceru</span>
             </div>
             <p className="mt-2 text-sm text-muted">
-              SeaSteps zbiera Twoją pozycję GPS <strong>w trakcie aktywnego spaceru</strong> —
-              także przy zgaszonym ekranie (zobaczysz powiadomienie systemowe) — żeby liczyć
-              trasę, punkty i pokazywać Cię uczestnikom tej samej sesji. Poza spacerem
-              lokalizacja nie jest zbierana. Szczegóły w{' '}
-              <a href="https://seasteps.pl/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
+              SeaSteps zbiera Twoją <strong>dokładną lokalizację (GPS)</strong> od startu do
+              zakończenia spaceru — <strong>także gdy aplikacja działa w tle albo ekran jest
+              zgaszony</strong>. Przez cały ten czas widzisz powiadomienie „Spacer trwa".
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Po co: zapis trasy, liczenie dystansu i punktów oraz Twoja pozycja na mapie dla
+              uczestników tej samej sesji spaceru. Czujnik kroków telefonu (zgoda „Aktywność
+              fizyczna”) pozwala nie liczyć metrów, gdy stoisz — kroki zostają w telefonie.
+              Lokalizacji nie sprzedajemy i nie
+              przekazujemy reklamodawcom. Po zakończeniu spaceru i poza nim lokalizacja nie
+              jest zbierana. Szczegóły w{' '}
+              <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">polityce prywatności</a>.
             </p>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => setDisclosureFor(null)}
+                onClick={() => { const id = disclosureFor; setDisclosureFor(null); if (id) cancelWalkWithoutGps(id) }}
                 className="flex-1 rounded-2xl border border-white/70 bg-white/60 py-2.5 text-sm font-bold text-muted transition active:scale-[0.98]"
               >
                 Nie teraz
@@ -618,7 +841,7 @@ export function Walk() {
                 {mode === 'signup' && (
                   <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted">
                     <input type="checkbox" checked={authTerms} onChange={(e) => setAuthTerms(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0f8b8d]" />
-                    <span>Akceptuję <a href="/regulamin.html" target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
+                    <span>Mam ukończone 18 lat i akceptuję <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="font-bold text-sea underline">politykę prywatności</a>.</span>
                   </label>
                 )}
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
@@ -626,7 +849,7 @@ export function Walk() {
                 <button onClick={doMagic} disabled={busy} className="mt-3 w-full text-center text-sm font-bold text-sea disabled:opacity-60">albo wyślij magiczny link →</button>
                 {magicMsg && <p className="mt-2 text-sm font-semibold text-[#2f7a45]">{magicMsg}</p>}
                 <p className="mt-2 text-center text-[11px] leading-snug text-muted">
-                  Logując się, akceptujesz <a href="/regulamin.html" target="_blank" rel="noopener" className="underline">regulamin</a> i <a href="/privacy.html" target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
+                  Logując się, akceptujesz <a href={siteUrl('/regulamin.html')} target="_blank" rel="noopener" className="underline">regulamin</a> i <a href={siteUrl('/privacy.html')} target="_blank" rel="noopener" className="underline">politykę prywatności</a>.
                 </p>
               </Card>
             </motion.div>
@@ -675,7 +898,7 @@ export function Walk() {
                 <label className="block text-xs font-bold uppercase tracking-wide text-muted">…albo dołącz do znajomego — wpisz jego kod</label>
                 <div className="mt-1 flex gap-2">
                   <input value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="np. 4G3YL7OA" maxLength={8} className="w-full rounded-xl border border-white/70 bg-white/80 px-3 py-2 font-mono text-sm tracking-widest outline-none" />
-                  <SoftButton onClick={joinWalk}>Dołącz</SoftButton>
+                  <SoftButton onClick={() => joinWalk()}>Dołącz</SoftButton>
                 </div>
                 {error && <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p>}
               </Card>
@@ -701,7 +924,7 @@ export function Walk() {
                   <Pill tone="leaf"><Leaf size={12} /> natura ×{mine?.nature ?? 1}</Pill>
                   <Pill tone="sea"><UsersThree size={12} /> we dwoje ×{mine?.together ?? 1}</Pill>
                   {combined > 1 && <Pill tone="sand">razem ×{combined.toFixed(1)}</Pill>}
-                  <Pill tone="muted"><Footprints size={12} /> GPS</Pill>
+                  <Pill tone="muted"><Footprints size={12} /> {stepSource === 'sensor' ? 'kroki + GPS' : 'GPS'}</Pill>
                 </div>
                 <p className="mt-3 text-center text-[11px] leading-snug text-muted">
                   Możesz zgasić ekran i schować telefon — spacer trwa, a trasa doliczy się po odblokowaniu.
@@ -711,13 +934,24 @@ export function Walk() {
                     Zezwól na ruch, by liczyć kroki dokładniej →
                   </button>
                 )}
+                {paused && (
+                  <p className="mt-3 rounded-2xl bg-sand/20 py-2 text-center text-xs font-bold text-deep">
+                    ⏸ Pauza — stoisz w miejscu. Ruszysz, liczę dalej.
+                  </p>
+                )}
+                {stepFallback && (
+                  <p className="mt-3 text-center text-[11px] leading-snug text-muted">
+                    Bez zgody na „Aktywność fizyczną” kroki liczę z samego GPS — w budynku mniej dokładnie. Zgodę włączysz w ustawieniach aplikacji.
+                  </p>
+                )}
                 {gpsNote && <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><MapPin size={14} weight="fill" /> {gpsNote}</p>}
                 {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
               </Card>
 
               {joinCode && (
                 <Card className="mt-3 p-3">
-                  <p className="text-xs text-muted">Kod dla osoby obok (wpisuje go w „Dołącz"):</p>
+                  <p className="text-xs text-muted">Osoby obok skanują QR aparatem telefonu albo wpisują kod w „Dołącz" (może dołączyć kilka osób):</p>
+                  <JoinQr code={joinCode} />
                   <div className="mt-1 flex items-center justify-between">
                     <code className="text-2xl font-extrabold tracking-widest text-deep">{joinCode}</code>
                     <button onClick={copyCode} className="text-sea" aria-label="Kopiuj kod">{copied ? <CheckCircle size={22} weight="fill" /> : <Copy size={22} />}</button>
@@ -793,7 +1027,7 @@ export function Walk() {
                     {summary.together && <Pill tone="sea"><UsersThree size={12} /> we dwoje ×1.5</Pill>}
                   </div>
                 </div>
-                <p className="mt-4 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-[#2f7a45]"><HandHeart size={16} weight="fill" /> Jesteś coraz bliżej adopcji foki!</p>
+                <p className="mt-4 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-[#2f7a45]"><HandHeart size={16} weight="fill" /> Każdy spacer się liczy — tak trzymaj!</p>
               </Card>
               <RatingPanel sessionId={sessionId} />
               {leaderboard.length > 0 && (

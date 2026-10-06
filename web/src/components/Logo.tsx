@@ -24,11 +24,11 @@ export function LogoMark({ size = 40 }: { size?: number }) {
   )
 }
 
-export function Logo() {
+export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <LogoMark size={36} />
-      <span className="font-display text-[22px] font-bold tracking-tight text-deep">
+    <div className={`flex items-center ${compact ? 'gap-2' : 'gap-2.5'}`}>
+      <LogoMark size={compact ? 28 : 36} />
+      <span className={`font-display ${compact ? 'text-[18px]' : 'text-[22px]'} font-bold tracking-tight text-deep`}>
         Sea<span className="text-sea">Steps</span>
       </span>
     </div>

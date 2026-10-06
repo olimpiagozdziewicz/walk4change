@@ -51,9 +51,44 @@ interface BgPlugin {
   ): Promise<string>
   removeWatcher(options: { id: string }): Promise<void>
   openSettings(): Promise<void>
+  // z bazowej klasy Plugin (Capacitor) — alias "location" z adnotacji pluginu
+  checkPermissions(): Promise<{ location: string }>
+  requestPermissions(): Promise<{ location: string }>
 }
 
 const BackgroundGeolocation = registerPlugin<BgPlugin>('BackgroundGeolocation')
+
+// Nasz mini-plugin z MainActivity: zgoda na powiadomienia (Android 13+, bez
+// niej powiadomienie „Spacer trwa” jest niewidoczne) i na aktywność fizyczną
+// oraz czujnik kroków (spec 2026-10-06-czujnik-krokow-auto-pauza).
+interface WalkSupportPlugin {
+  requestPermissions(): Promise<{ notifications: string; activity: string }>
+  startStepCounter(): Promise<{ available: boolean; reason?: 'permission' | 'sensor' }>
+  stopStepCounter(): Promise<void>
+  addListener(event: 'steps', cb: (e: { total: number }) => void): Promise<{ remove: () => Promise<void> }>
+}
+const WalkSupport = registerPlugin<WalkSupportPlugin>('WalkSupport')
+
+// Zgody pytamy raz, przy starcie GPS — czujnik kroków czeka na ten sam moment,
+// żeby nie startować przed odpowiedzią na systemowe okienko.
+let permissionsReady: Promise<boolean> | null = null
+
+/**
+ * Zgoda na lokalizację PRZED addWatcher. Plugin przy braku zgody prosi o nią,
+ * ale nie czeka i od razu woła startForeground(type=location) — Android 14+
+ * odrzuca to bez zgody, a po jej nadaniu plugin już nie ponawia promocji
+ * usługi. Bez usługi pierwszoplanowej GPS w tle zamiera (bug 05.10.2026).
+ */
+async function ensureNativePermissions(): Promise<boolean> {
+  try {
+    await WalkSupport.requestPermissions()
+  } catch {
+    /* stary build bez pluginu albo Android < 13 — spacer działa dalej */
+  }
+  let state = (await BackgroundGeolocation.checkPermissions()).location
+  if (state !== 'granted') state = (await BackgroundGeolocation.requestPermissions()).location
+  return state === 'granted'
+}
 
 /**
  * Nasłuch pozycji. Zwraca uchwyt ze `stop()` — bezpieczny do wywołania
@@ -64,11 +99,17 @@ export function watchPosition(
   onError: (message: string) => void,
 ): GeoWatch {
   if (isNativeApp()) {
-    const idPromise = BackgroundGeolocation.addWatcher(
+    let stopped = false
+    permissionsReady = ensureNativePermissions()
+    const idPromise = permissionsReady.then((granted) => {
+      if (!granted) throw Object.assign(new Error('Permission denied.'), { code: 'NOT_AUTHORIZED' })
+      if (stopped) throw new Error('stopped')
+      return BackgroundGeolocation.addWatcher(
       {
         backgroundTitle: 'Spacer trwa',
         backgroundMessage: 'SeaSteps liczy Twoją trasę i punkty.',
-        requestPermissions: true,
+        // zgoda już jest (ensureNativePermissions) — patrz komentarz wyżej
+        requestPermissions: false,
         stale: false,
         // Serwer i tak ma deadband 5 m; filtr 3 m tnie szum bez utraty kroków.
         distanceFilter: 3,
@@ -87,12 +128,19 @@ export function watchPosition(
         if (position.simulated) return
         onFix({ lat: position.latitude, lng: position.longitude, accuracy: position.accuracy ?? null })
       },
-    )
-    idPromise.catch((e: unknown) =>
-      onError(`Nie udało się uruchomić GPS: ${e instanceof Error ? e.message : 'nieznany błąd'}`),
-    )
+      )
+    })
+    idPromise.catch((e: unknown) => {
+      if (stopped) return
+      onError(
+        (e as BgError)?.code === 'NOT_AUTHORIZED'
+          ? 'Brak zgody na lokalizację. Nadaj uprawnienie w ustawieniach aplikacji.'
+          : `Nie udało się uruchomić GPS: ${e instanceof Error ? e.message : 'nieznany błąd'}`,
+      )
+    })
     return {
       stop: () => {
+        stopped = true
         idPromise.then((id) => BackgroundGeolocation.removeWatcher({ id })).catch(() => {})
       },
     }
@@ -114,6 +162,34 @@ export function watchPosition(
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
   )
   return { stop: () => navigator.geolocation.clearWatch(watchId) }
+}
+
+export interface StepWatch {
+  stop: () => void
+}
+
+/**
+ * Czujnik kroków telefonu (tylko apka natywna). `onTotal` dostaje sumę kroków
+ * od startu. Zwraca null, gdy czujnika nie ma, brak zgody albo to przeglądarka —
+ * spacer liczy się wtedy jak dotąd, z samego GPS.
+ */
+export async function watchSteps(onTotal: (total: number) => void): Promise<StepWatch | null> {
+  if (!isNativeApp()) return null
+  try {
+    // Zwykle zgody już pyta watchPosition; gdyby nie — pytamy sami.
+    await (permissionsReady ??= ensureNativePermissions())
+    const res = await WalkSupport.startStepCounter()
+    if (!res.available) return null
+    const listener = await WalkSupport.addListener('steps', (e) => onTotal(e.total))
+    return {
+      stop: () => {
+        void listener.remove().catch(() => {})
+        void WalkSupport.stopStepCounter().catch(() => {})
+      },
+    }
+  } catch {
+    return null // stary build apki bez czujnika w pluginie
+  }
 }
 
 const DISCLOSURE_KEY = 'ss-geo-disclosure'

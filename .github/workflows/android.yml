@@ -48,6 +48,19 @@ jobs:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
 
+      - name: Upload key SHA-256 fingerprint (public) for assetlinks.json
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          # odcisk certyfikatu jest publiczny; do logu trafiaja wylacznie linie SHA256:
+          FP=$(keytool -list -v -alias upload -keystore "$RUNNER_TEMP/upload-keystore.p12" -storetype PKCS12 -storepass "$KEYSTORE_PASS" 2>/dev/null | grep -E '^\s*SHA256:' | head -1 | sed -E 's/^\s*SHA256:\s*//')
+          echo "Upload key SHA256: $FP"
+          test -n "$FP"
+          cat > assetlinks.json <<JSON
+          [{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"pl.seasteps.app","sha256_cert_fingerprints":["$FP"]}}]
+          JSON
+          sed -i 's/^ *//' assetlinks.json
+
       - name: Gradle bundleRelease (signed)
         working-directory: web/android
         env:
@@ -55,6 +68,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew bundleRelease \
+            -PversionCode=${{ github.run_number }} \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload-keystore.p12" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASS" \
             -Pandroid.injected.signing.key.alias=upload \
@@ -63,8 +77,44 @@ jobs:
       - name: Rename artifact
         run: cp web/android/app/build/outputs/bundle/release/app-release.aab SeaSteps.aab
 
+      - name: Dump merged manifest (targetSdk, permissions)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" \
+            https://github.com/google/bundletool/releases/download/1.18.1/bundletool-all-1.18.1.jar
+          java -jar "$RUNNER_TEMP/bundletool.jar" dump manifest --bundle SeaSteps.aab > "$RUNNER_TEMP/manifest.xml"
+          echo "=== versionCode / versionName / targetSdk / minSdk ==="
+          grep -E 'versionCode|versionName|targetSdkVersion|minSdkVersion|allowBackup' "$RUNNER_TEMP/manifest.xml" || true
+          echo "=== uses-permission ==="
+          grep -E 'uses-permission' -A0 "$RUNNER_TEMP/manifest.xml" | sed 's/^ *//' || true
+          if grep -q 'ACCESS_BACKGROUND_LOCATION' "$RUNNER_TEMP/manifest.xml"; then
+            echo "::error::ACCESS_BACKGROUND_LOCATION w manifescie AAB"; exit 1
+          fi
+
+      - name: Build universal APK (signed with upload key)
+        env:
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          printf '%s' "$KEYSTORE_PASS" > "$RUNNER_TEMP/ks.pass"
+          java -jar "$RUNNER_TEMP/bundletool.jar" build-apks             --bundle=SeaSteps.aab --output="$RUNNER_TEMP/app.apks" --mode=universal             --ks="$RUNNER_TEMP/upload-keystore.p12" --ks-pass=file:"$RUNNER_TEMP/ks.pass"             --ks-key-alias=upload --key-pass=file:"$RUNNER_TEMP/ks.pass"
+          rm -f "$RUNNER_TEMP/ks.pass"
+          unzip -o -q "$RUNNER_TEMP/app.apks" universal.apk -d "$RUNNER_TEMP/apk"
+          cp "$RUNNER_TEMP/apk/universal.apk" SeaSteps.apk
+          ls -l SeaSteps.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SeaSteps-apk
+          path: SeaSteps.apk
+          retention-days: 30
+
       - uses: actions/upload-artifact@v4
         with:
           name: SeaSteps-aab
           path: SeaSteps.aab
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assetlinks
+          path: assetlinks.json
           retention-days: 30

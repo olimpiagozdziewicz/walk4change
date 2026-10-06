@@ -15,7 +15,7 @@ pub struct UserAuthRow {
 
 /// Version of the terms/privacy documents the user accepts at sign-up.
 /// Bump when `regulamin.html` / `privacy.html` change materially.
-pub const TERMS_VERSION: &str = "2026-07-13";
+pub const TERMS_VERSION: &str = "2026-10-13";
 
 /// Insert a new user and their totals row in a single transaction.
 ///
@@ -121,6 +121,31 @@ pub async fn set_email_verified(pool: &PgPool, id: Uuid) -> Result<(), AppError>
          WHERE id = $1 AND email_verified_at IS NULL",
     )
     .bind(id)
+    .execute(pool)
+    .await
+    .map_err(AppError::internal)?;
+    Ok(())
+}
+
+/// Logowanie dowodzące kontroli nad skrzynką (magic link, Supabase OTP) na
+/// koncie z NIEzweryfikowanym e-mailem: oznacz e-mail jako zweryfikowany
+/// I podmień hash hasła na losowy, nieużywalny — jednym UPDATE-em (atomowo).
+///
+/// Audyt 2026-10-06, H3: rejestracja nie wymaga weryfikacji, a logowanie
+/// mailem dopinało się do istniejącego konta po samym adresie — hasło
+/// ustawione przez kogoś, kto zajął cudzy adres, zostawało ważne. Konto już
+/// zweryfikowane (właściciel sam ustawił hasło po dowodzie) nie jest ruszane.
+pub async fn claim_unverified_email(
+    pool: &PgPool,
+    id: Uuid,
+    unusable_password_hash: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE users SET email_verified_at = now(), password_hash = $2 \
+         WHERE id = $1 AND email_verified_at IS NULL",
+    )
+    .bind(id)
+    .bind(unusable_password_hash)
     .execute(pool)
     .await
     .map_err(AppError::internal)?;

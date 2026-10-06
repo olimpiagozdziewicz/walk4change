@@ -14,12 +14,13 @@ echo "==> building web app (base=/app/)"
 
 echo "==> assembling combined site at $OUT"
 rm -rf "$OUT"; mkdir -p "$OUT/app"
-cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/regulamin.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" \
+cp "$ROOT/index.html" "$ROOT/privacy.html" "$ROOT/regulamin.html" "$ROOT/usun-konto.html" "$ROOT/bezpieczenstwo.html" "$ROOT/favicon.svg" "$ROOT/app-preview.png" \
    "$ROOT/robots.txt" "$ROOT/sitemap.xml" "$ROOT/llms.txt" "$ROOT/favicon-192.png" "$ROOT/favicon.ico" "$OUT/"
 # plik klucza IndexNow - nazwa pliku JEST kluczem (32 znaki hex), wiec bierzemy go globem,
 # zeby rotacja klucza nie wymagala edycji tego skryptu. Rejestr: scripts/indexnow-domeny.json
 cp "$ROOT"/[0-9a-f]*.txt "$OUT/" 2>/dev/null || true
-# Android App Links (spec 2026-10-01): assetlinks.json musi byc pod /.well-known/ w roocie domeny
+# Android App Links (spec 2026-10-01): assetlinks.json musi byc pod /.well-known/ w roocie domeny;
+# tam tez security.txt (RFC 9116, CRA: kontakt do zglaszania podatnosci)
 if [ -d "$ROOT/.well-known" ]; then mkdir -p "$OUT/.well-known" && cp "$ROOT/.well-known/"* "$OUT/.well-known/"; fi
 cp -r "$ROOT/web/dist/." "$OUT/app/"
 
@@ -33,6 +34,10 @@ cat > "$OUT/vercel.json" <<'JSON'
     {
       "source": "/.well-known/assetlinks.json",
       "headers": [{ "key": "Content-Type", "value": "application/json" }]
+    },
+    {
+      "source": "/.well-known/security.txt",
+      "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
     }
   ]
 }

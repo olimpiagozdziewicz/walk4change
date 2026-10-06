@@ -8,13 +8,25 @@
   </url>
   <url>
     <loc>https://seasteps.pl/privacy.html</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
     <loc>https://seasteps.pl/regulamin.html</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://seasteps.pl/usun-konto.html</loc>
+    <lastmod>2026-10-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://seasteps.pl/bezpieczenstwo.html</loc>
+    <lastmod>2026-10-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

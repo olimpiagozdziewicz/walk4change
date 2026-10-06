@@ -18,7 +18,7 @@ export function MagicVerify() {
         if (await exchangeSupabaseSession()) {
           done = true
           window.history.replaceState(null, '', import.meta.env.BASE_URL || '/')
-          nav('/')
+          nav('/', { replace: true })
           return
         }
       } catch {

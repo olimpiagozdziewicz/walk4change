@@ -139,6 +139,15 @@ pub fn check_verify_email_quota(user: Uuid) -> Result<(), u64> {
     VERIFY_EMAIL_LIMITER.check(user)
 }
 
+/// Content reports (UGC moderation): 10/min per account.
+static CONTENT_REPORT_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(10, 60));
+
+/// Per-account quota for `POST /reports`.
+pub fn check_content_report_quota(user: Uuid) -> Result<(), u64> {
+    CONTENT_REPORT_LIMITER.check(user)
+}
+
 /// Per-account quota for `GET /me/export`.
 pub fn check_export_quota(user: Uuid) -> Result<(), u64> {
     EXPORT_LIMITER.check(user)

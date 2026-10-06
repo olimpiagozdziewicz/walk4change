@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon.svg" />
+<meta name="theme-color" content="#0f8b8d" />
+<meta name="description" content="Bezpieczeństwo SeaSteps: jak zgłosić podatność (polityka CVD) w aplikacji Android, aplikacji webowej i API." />
+<meta name="robots" content="index, follow" />
+<title>Bezpieczeństwo i zgłaszanie podatności · SeaSteps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef7f8; --ink:#14343a; --muted:#5d7c81;
+    --sea:#0f8b8d; --deep:#0c5a71;
+    --display:'Outfit',sans-serif; --body:'Manrope',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--body); color:var(--ink); line-height:1.65;
+    background:
+      radial-gradient(circle at 12% -4%, rgba(88,184,108,.16), transparent 26%),
+      radial-gradient(circle at 100% 0%, rgba(15,139,141,.22), transparent 30%),
+      linear-gradient(180deg,#f8fcfd 0%,#e7f4f5 100%);
+    min-height:100vh;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:32px 24px 80px;}
+  a{color:var(--sea); text-decoration:none; font-weight:700;}
+  a:hover{text-decoration:underline;}
+  .back{display:inline-flex; align-items:center; gap:6px; font-size:14px; margin-bottom:28px; color:var(--deep);}
+  .card{background:rgba(255,255,255,.82); border:1px solid rgba(255,255,255,.7); backdrop-filter:blur(14px); border-radius:26px; padding:32px 28px;}
+  h1{font-family:var(--display); letter-spacing:-.03em; font-size:30px; margin:0 0 4px; color:var(--deep);}
+  h2{font-family:var(--display); letter-spacing:-.02em; font-size:19px; margin:30px 0 8px; color:var(--ink);}
+  .date{color:var(--muted); font-size:14px; margin:0 0 18px; font-weight:600;}
+  p{margin:0 0 12px;}
+  ul{margin:0 0 12px; padding-left:22px;}
+  li{margin:4px 0;}
+  .muted{color:var(--muted); font-size:14px;}
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:0 0 12px;}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid rgba(93,124,129,.18); vertical-align:top;}
+  th{color:var(--deep); font-family:var(--display);}
+  @media(max-width:560px){ .card{padding:24px 18px;} h1{font-size:25px;} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/">◂ Wróć do SeaSteps</a>
+    <div class="card">
+      <h1>Bezpieczeństwo i zgłaszanie podatności</h1>
+      <p class="date">Wersja 2026-10-13</p>
+
+      <p>Dbamy o bezpieczeństwo SeaSteps i danych osób, które z niego korzystają.
+      Jeśli znajdziesz lukę bezpieczeństwa, daj nam znać — ta strona opisuje, jak to
+      zrobić i czego możesz się po nas spodziewać (polityka skoordynowanego ujawniania
+      podatności, CVD). Wersja do odczytu maszynowego:
+      <a href="/.well-known/security.txt">/.well-known/security.txt</a>.</p>
+      <p>Producentem aplikacji SeaSteps i usługodawcą jest <strong>963 sp. z o.o.</strong>
+      z siedzibą w Gdańsku (ul. Aleksandra Gryglewskiego 6 lok. 8, 80-303 Gdańsk), KRS: 0001214277, NIP: 5842878792,
+      REGON: 543615988 (od 8 października 2026).</p>
+
+      <h2>1. Zakres</h2>
+      <ul>
+        <li>aplikacja SeaSteps na Androida (<strong>pl.seasteps.app</strong>, Google Play),</li>
+        <li>aplikacja webowa <strong>seasteps.pl/app</strong>,</li>
+        <li>API i serwer aplikacji SeaSteps (backend, z którym łączą się obie aplikacje),</li>
+        <li>strona <strong>seasteps.pl</strong>.</li>
+      </ul>
+      <p>Podatności w usługach dostawców (Google Play, Microsoft Azure, Supabase, Vercel)
+      zgłaszaj bezpośrednio im, chyba że wynikają z naszej konfiguracji — wtedy do nas.</p>
+
+      <h2>2. Jak zgłosić</h2>
+      <p>Napisz na <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a>
+      z tematem zaczynającym się od „[BEZPIECZEŃSTWO]”. Opisz, jeśli możesz:</p>
+      <ul>
+        <li>czego dotyczy luka (aplikacja Android i jej wersja, aplikacja webowa, API — adres),</li>
+        <li>kroki do odtworzenia lub dowód koncepcji,</li>
+        <li>możliwe skutki — jakie dane lub funkcje są zagrożone,</li>
+        <li>czy wiesz o tym, że ktoś tę lukę już wykorzystuje,</li>
+        <li>jak możemy się z Tobą kontaktować i czy chcesz podziękowania z imienia.</li>
+      </ul>
+      <p>Piszemy po polsku i po angielsku. Nie dołączaj danych osobowych innych
+      użytkowników — wystarczy opis, jak do nich dotrzeć.</p>
+
+      <h2>3. Co dzieje się dalej</h2>
+      <ul>
+        <li>potwierdzamy otrzymanie zgłoszenia w ciągu <strong>5 dni roboczych</strong>;</li>
+        <li>oceniamy lukę i informujemy Cię o wyniku oceny oraz planie naprawy;</li>
+        <li>naprawiamy lukę i udostępniamy poprawkę — w aplikacji Android przez aktualizację
+            w Google Play, w aplikacji webowej i API po stronie serwera;</li>
+        <li>informujemy Cię o naprawie. Prosimy, żeby szczegóły luki upubliczniać dopiero
+            po udostępnieniu poprawki albo po uzgodnieniu terminu z nami.</li>
+      </ul>
+      <p>Aktywnie wykorzystywane podatności i poważne incydenty bezpieczeństwa zgłaszamy
+      właściwemu zespołowi CSIRT i agencji ENISA oraz informujemy o nich użytkowników,
+      których dotyczą — zgodnie z art. 14 rozporządzenia (UE) 2024/2847 (Cyber Resilience Act).</p>
+
+      <h2>4. Zgłoszenia w dobrej wierze</h2>
+      <p>Nie będziemy podejmować kroków prawnych wobec osób, które szukają i zgłaszają
+      podatności w dobrej wierze i zgodnie z tą polityką. Dobra wiara oznacza, że:</p>
+      <ul>
+        <li>testujesz na własnym koncie albo kontach, na które masz zgodę właściciela;</li>
+        <li>nie pobierasz, nie zmieniasz i nie usuwasz cudzych danych ponad minimum
+            potrzebne do pokazania luki, a dostęp do nich przerywasz od razu;</li>
+        <li>nie zakłócasz działania usługi (bez ataków DoS, masowych zapytań i spamu),
+            nie stosujesz socjotechniki wobec użytkowników ani nas i nie testujesz
+            fizycznego bezpieczeństwa;</li>
+        <li>dajesz nam rozsądny czas na naprawę przed upublicznieniem szczegółów.</li>
+      </ul>
+      <p>SeaSteps nie prowadzi programu nagród pieniężnych za zgłoszenia (bug bounty).</p>
+
+      <p class="muted">Zobacz też: <a href="/privacy.html">Polityka Prywatności</a>,
+      <a href="/regulamin.html">Regulamin</a>, <a href="/usun-konto.html">Usuwanie konta</a>.
+      Kontakt: <a href="mailto:admin@seasteps.pl">admin@seasteps.pl</a> ·
+      963 sp. z o.o., ul. Aleksandra Gryglewskiego 6 lok. 8, 80-303 Gdańsk</p>
+    </div>
+  </div>
+</body>
+</html>

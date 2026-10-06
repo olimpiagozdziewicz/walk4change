@@ -7,6 +7,9 @@ use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 use crate::{config::MailConfig, error::AppError};
 
+/// SMTP connect/command timeout (audit debt: lettre had no timeout set).
+const SMTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// Send an HTML email through the configured SMTP relay.
 async fn send_html(
     cfg: &MailConfig,
@@ -28,6 +31,7 @@ async fn send_html(
             .map_err(AppError::internal)?
             .port(cfg.port)
             .credentials(creds)
+            .timeout(Some(SMTP_TIMEOUT))
             .build();
 
     mailer.send(email).await.map_err(AppError::internal)?;
@@ -74,4 +78,20 @@ pub async fn send_verification_email(
         "Jeśli to nie Ty zakładałeś konto w SeaSteps, zignoruj tę wiadomość.",
     );
     send_html(cfg, to_email, "Potwierdź e-mail w SeaSteps", body).await
+}
+
+/// Notify the moderation mailbox about a new content report (UGC policy,
+/// 2026-10-01). Deliberately carries NO reported content, note or reporter
+/// identity — only the report id and target type; details live in the DB
+/// (`content_reports`).
+pub async fn send_report_notification(
+    cfg: &MailConfig,
+    to_email: &str,
+    report_id: uuid::Uuid,
+    target_type: &str,
+) -> Result<(), AppError> {
+    let body = format!(
+        "<div style=\"font-family:system-ui,sans-serif;max-width:480px;margin:auto\">           <h2 style=\"color:#0c5a71\">Nowe zgłoszenie treści</h2>           <p>Typ celu: <b>{target_type}</b><br>ID zgłoszenia: <code>{report_id}</code></p>           <p>Szczegóły w tabeli <code>content_reports</code> (status <code>open</code>).            Regulamin pkt 7: rozpatrzenie bez zbędnej zwłoki.</p>         </div>"
+    );
+    send_html(cfg, to_email, "SeaSteps: nowe zgłoszenie treści", body).await
 }

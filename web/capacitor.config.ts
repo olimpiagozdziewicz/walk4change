@@ -7,6 +7,11 @@ const config: CapacitorConfig = {
   appId: 'pl.seasteps.app',
   appName: 'SeaSteps',
   webDir: 'dist',
+  plugins: {
+    // jasna apka: ciemne ikonki paska stanu i nawigacji niezaleznie od trybu ciemnego telefonu
+    // (DEFAULT bral styl z systemu i dawal biale ikonki na jasnym tle - niewidoczne)
+    SystemBars: { style: 'LIGHT' },
+  },
 }
 
 export default config

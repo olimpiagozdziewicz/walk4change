@@ -82,6 +82,8 @@ export interface EcoReport {
   createdAt?: string
   /** Imię autora — tylko w feedzie społeczności (GET /eco/reports). */
   author?: string
+  /** Id autora — tylko w feedzie (ukrywa „Zgłoś” na własnych wpisach). */
+  authorId?: string
   likeCount?: number
   commentCount?: number
   likedByMe?: boolean
@@ -442,6 +444,7 @@ interface BackendEcoReport {
   photo_after_url: string | null
   created_at: string
   author?: string
+  user_id?: string
   like_count?: number
   comment_count?: number
   liked_by_me?: boolean
@@ -460,6 +463,7 @@ function mapEcoReport(r: BackendEcoReport): EcoReport {
     photoAfterUrl: r.photo_after_url,
     createdAt: r.created_at,
     author: r.author,
+    authorId: r.user_id,
     likeCount: r.like_count ?? 0,
     commentCount: r.comment_count ?? 0,
     likedByMe: r.liked_by_me ?? false,
@@ -500,11 +504,75 @@ async function addEcoComment(reportId: string, body: string): Promise<EcoComment
   return res.data ? mapEcoComment(res.data) : null
 }
 
+// ── Zgłaszanie treści (UGC, regulamin pkt 7) ──────────────
+export type ReportTargetType = 'eco_post' | 'eco_comment' | 'user'
+export type ReportReason =
+  | 'spam'
+  | 'harassment'
+  | 'hate'
+  | 'sexual'
+  | 'violence'
+  | 'privacy'
+  | 'illegal'
+  | 'other'
+
+export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'spam', label: 'Spam lub reklama' },
+  { value: 'harassment', label: 'Nękanie lub obrażanie' },
+  { value: 'hate', label: 'Mowa nienawiści' },
+  { value: 'sexual', label: 'Treści seksualne' },
+  { value: 'violence', label: 'Przemoc lub groźby' },
+  { value: 'privacy', label: 'Naruszenie prywatności (np. czyjś wizerunek, adres)' },
+  { value: 'illegal', label: 'Treść nielegalna' },
+  { value: 'other', label: 'Inny powód' },
+]
+
+/** POST /reports — zgłoś cudzą treść. Idempotentne (drugie zgłoszenie tego samego = OK). */
+async function reportContent(input: {
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  note?: string
+}): Promise<void> {
+  await apiRequest('/reports', {
+    method: 'POST',
+    body: {
+      target_type: input.targetType,
+      target_id: input.targetId,
+      reason: input.reason,
+      note: input.note?.trim() ? input.note.trim().slice(0, 500) : null,
+    },
+  })
+}
+
+/**
+ * Zdjęcie z aparatu (12–50 Mpx) łatwo przekracza limit 5 MB koszyka — przed
+ * wysyłką skalujemy dłuższy bok do 1600 px i zapisujemy jako JPEG. Gdy
+ * przeglądarka nie umie zdekodować pliku, wysyłamy oryginał.
+ */
+async function shrinkPhoto(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
+    if (scale === 1 && file.size < 1_500_000 && file.type === 'image/jpeg') return file
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.85))
+    return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
 /** Upload a photo to Supabase Storage (`eco-photos`); returns its public URL. */
-export async function uploadEcoPhoto(file: File): Promise<string | null> {
+export async function uploadEcoPhoto(original: File): Promise<string | null> {
   try {
     const { supabase, hasSupabase } = await import('./supabase')
     if (!hasSupabase()) return null
+    const file = await shrinkPhoto(original)
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const id = (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.() ?? `${Date.now()}-${Math.round(Math.random() * 1e9)}`
     const path = `${id}.${ext}`
@@ -1000,6 +1068,7 @@ export const api = {
   toggleEcoLike,
   getEcoComments: fetchEcoComments,
   addEcoComment,
+  reportContent,
   getMyWalks: fetchMyWalks,
   getWalkTrack: fetchWalkTrack,
   redeemReward,
