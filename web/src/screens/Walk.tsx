@@ -203,7 +203,7 @@ export function Walk() {
       if (startedAtRef.current != null) {
         setSec(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
       }
-      // Auto-pauza: bramka kroków bez kroków od 10 s (GPS przy bezruchu
+      // Auto-pauza: bramka kroków bez kroków od 6 s (GPS przy bezruchu
       // może w ogóle nie dawać fixów, więc sprawdzamy tu, nie w handlerze fixa).
       const gate = gateRef.current
       setPaused(gate != null && !gate.isMoving(Date.now()))

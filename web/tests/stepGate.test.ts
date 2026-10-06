@@ -67,12 +67,12 @@ test('paczka kroków dostarczona naraz (ekran zgaszony) jest w pełni do wykorzy
   assert.ok(Math.abs(g.traveledMeters() - 110) < 0.01)
 })
 
-test('auto-pauza: ruch tylko gdy były kroki w ostatnich 10 s', () => {
+test('auto-pauza: ruch tylko gdy były kroki w ostatnich 6 s', () => {
   const g = createStepGate()
   assert.equal(g.isMoving(0), false)
   g.onSteps(3, 1000)
   assert.equal(g.isMoving(5000), true)
-  assert.equal(g.isMoving(12_000), false)
+  assert.equal(g.isMoving(8000), false)
 })
 
 test('pakiet zero kroków nie włącza ruchu ani dystansu', () => {

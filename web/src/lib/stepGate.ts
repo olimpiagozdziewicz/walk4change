@@ -28,7 +28,7 @@ const MAX_BUDGET_M = 25
  * Brak kroków dłużej niż tyle = auto-pauza. Niewykorzystany zapas kroków
  * wtedy przepada — kroki sprzed zatrzymania nie płacą za dryf, gdy się siedzi.
  */
-const MOVING_WINDOW_MS = 10_000
+const MOVING_WINDOW_MS = 6_000
 
 export function metersBetween(a: LatLng, b: LatLng): number {
   const R = 6_371_008.8
@@ -47,7 +47,7 @@ export interface StepGate {
   onFix(fix: LatLng, now: number): LatLng
   position(): LatLng | null
   traveledMeters(): number
-  /** Czy w ostatnich 10 s były kroki (inaczej: auto-pauza). */
+  /** Czy w ostatnich 6 s były kroki (inaczej: auto-pauza). */
   isMoving(now: number): boolean
 }
 
