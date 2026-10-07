@@ -3,11 +3,12 @@ import { siteUrl } from '../lib/site'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { motion } from 'motion/react'
-import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit, EnvelopeSimple, DownloadSimple, Trash, Warning } from '@phosphor-icons/react'
+import { Footprints, CalendarHeart, Recycle, GearSix, PencilSimple, Check, SignOut, Prohibit, EnvelopeSimple, DownloadSimple, Trash, Warning, Bug } from '@phosphor-icons/react'
 import { Card, Pill, PrimaryButton } from '../components/ui'
 import { Glyph } from '../components/Glyph'
 import { FootstepTrail } from '../components/Footsteps'
 import { Avatar } from '../components/Avatar'
+import { BugReportModal } from '../components/BugReportModal'
 import { showInstallModal } from '../components/InstallModal'
 import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward, type BlockedUser } from '../lib/api'
 import { getInterests, saveInterests } from '../lib/interests'
@@ -39,6 +40,7 @@ export function Profile() {
   const [deleteInput, setDeleteInput] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [bugOpen, setBugOpen] = useState(false)
 
   const sendVerifyMail = async () => {
     if (verifySending) return
@@ -450,6 +452,26 @@ export function Profile() {
             </Card>
           </>
         )}
+
+        {/* zgłoszenie błędu z wersją apki, telefonem i zapisem spaceru (spec 2026-10-07) */}
+        <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Pomoc</h2>
+        <Card className="flex items-center gap-3 p-3.5">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sea/10 text-sea">
+            <Bug size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-ink">Zgłoś błąd</div>
+            <div className="text-xs text-muted">Coś nie działa? Opisz to, a my odtworzymy problem i go naprawimy.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBugOpen(true)}
+            className="shrink-0 rounded-full bg-sea/10 px-3 py-1.5 text-xs font-bold text-deep transition active:scale-95"
+          >
+            Zgłoś
+          </button>
+        </Card>
+        {bugOpen && <BugReportModal screen="profile" onClose={() => setBugOpen(false)} />}
 
         {/* konto: RODO — eksport + usunięcie (spec 2026-07-13) */}
         <h2 className="mb-3 mt-6 font-display text-lg font-bold text-ink">Twoje dane</h2>
