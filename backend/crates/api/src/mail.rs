@@ -95,3 +95,17 @@ pub async fn send_report_notification(
     );
     send_html(cfg, to_email, "SeaSteps: nowe zgłoszenie treści", body).await
 }
+
+/// Admin notice about a new bug report — id + category only (no description,
+/// no trace: personal data stays in the database).
+pub async fn send_bug_report_notification(
+    cfg: &MailConfig,
+    to_email: &str,
+    report_id: uuid::Uuid,
+    category: &str,
+) -> Result<(), AppError> {
+    let body = format!(
+        "<div style=\"font-family:system-ui,sans-serif;max-width:480px;margin:auto\">           <h2 style=\"color:#0c5a71\">Nowe zgłoszenie błędu</h2>           <p>Kategoria: <b>{category}</b><br>ID zgłoszenia: <code>{report_id}</code></p>           <p>Szczegóły w tabeli <code>bug_reports</code> (status <code>open</code>).</p>         </div>"
+    );
+    send_html(cfg, to_email, "SeaSteps: nowe zgłoszenie błędu", body).await
+}

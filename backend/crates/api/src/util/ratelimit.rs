@@ -148,6 +148,16 @@ pub fn check_content_report_quota(user: Uuid) -> Result<(), u64> {
     CONTENT_REPORT_LIMITER.check(user)
 }
 
+/// Bug reports ("Zgłoś błąd"): 5/hour per account — each may carry a ~1 MB
+/// walk trace and triggers an admin mail (spec 2026-10-07).
+static BUG_REPORT_LIMITER: LazyLock<RateLimiter<Uuid>> =
+    LazyLock::new(|| RateLimiter::new(5, 3600));
+
+/// Per-account quota for `POST /bug-reports`.
+pub fn check_bug_report_quota(user: Uuid) -> Result<(), u64> {
+    BUG_REPORT_LIMITER.check(user)
+}
+
 /// Per-account quota for `GET /me/export`.
 pub fn check_export_quota(user: Uuid) -> Result<(), u64> {
     EXPORT_LIMITER.check(user)

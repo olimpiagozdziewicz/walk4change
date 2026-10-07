@@ -1,4 +1,5 @@
 pub mod blocks;
+pub mod bug_reports;
 pub mod eco;
 pub mod events;
 pub mod friends;
