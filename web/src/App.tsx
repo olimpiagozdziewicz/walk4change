@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core'
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { App as CapApp } from '@capacitor/app'
 import { initAppLinks } from './lib/appLinks'
+import { startAutoUpdates } from './lib/appUpdate'
 import { isWalkActive, WALK_LEAVE_CONFIRM } from './lib/walkGuard'
 import { hasPendingJoin, loadActiveWalk, normalizeJoinCode, setPendingJoin } from './lib/activeWalk'
 import { isAuthed, setAuthed } from './lib/auth'
@@ -96,6 +97,8 @@ function AppLayout() {
 function App() {
   const navigate = useNavigate()
   useEffect(() => initAppLinks((to) => navigate(to)), [navigate])
+  // Aktualizacje z Google Play: pobieranie w tle, instalacja poza spacerem (spec 2026-10-07)
+  useEffect(() => startAutoUpdates(), [])
   return (
     <>
     <ScrollToTop />

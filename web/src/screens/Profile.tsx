@@ -9,6 +9,7 @@ import { Glyph } from '../components/Glyph'
 import { FootstepTrail } from '../components/Footsteps'
 import { Avatar } from '../components/Avatar'
 import { BugReportModal } from '../components/BugReportModal'
+import { appVersionLabel } from '../lib/appUpdate'
 import { showInstallModal } from '../components/InstallModal'
 import { api, INTEREST_OPTIONS, type Profile as ProfileT, type EcoReport, type RedemptionItem, type Reward, type BlockedUser } from '../lib/api'
 import { getInterests, saveInterests } from '../lib/interests'
@@ -41,6 +42,8 @@ export function Profile() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [bugOpen, setBugOpen] = useState(false)
+  const [version, setVersion] = useState<string | null>(null)
+  useEffect(() => { void appVersionLabel().then(setVersion) }, [])
 
   const sendVerifyMail = async () => {
     if (verifySending) return
@@ -576,6 +579,7 @@ export function Profile() {
             Polityka Prywatności
           </a>
         </p>
+        {version && <p className="mt-2 text-center text-[11px] text-muted/80 tabular-nums">SeaSteps {version}</p>}
 
       </div>
     </div>
