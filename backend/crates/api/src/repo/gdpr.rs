@@ -117,6 +117,7 @@ pub async fn delete_account(
         "DELETE FROM friendships WHERE requester_id = $1 OR addressee_id = $1",
         "DELETE FROM walk_ratings WHERE rater_id = $1 OR rated_id = $1",
         "DELETE FROM content_reports WHERE reporter_id = $1",
+        "DELETE FROM bug_reports WHERE user_id = $1",
     ] {
         sqlx::query(sql)
             .bind(user)
@@ -311,6 +312,13 @@ pub async fn export(pool: &PgPool, user: Uuid) -> Result<serde_json::Value, AppE
     )
     .await?;
 
+    let bug_reports = section(
+        pool,
+        "SELECT COALESCE(json_agg(t), '[]')::text FROM (             SELECT id, category, description, app_version, device, platform, screen,                    trace, status, created_at, resolved_at             FROM bug_reports WHERE user_id = $1 ORDER BY created_at) t",
+        user,
+    )
+    .await?;
+
     Ok(serde_json::json!({
         "format": "seasteps-export",
         "version": 1,
@@ -326,6 +334,7 @@ pub async fn export(pool: &PgPool, user: Uuid) -> Result<serde_json::Value, AppE
         "eco_reports": eco_reports,
         "blocked_users": blocked_users,
         "content_reports": content_reports,
+        "bug_reports": bug_reports,
     }))
 }
 

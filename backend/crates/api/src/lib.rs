@@ -266,6 +266,12 @@ pub fn build_app(state: AppState) -> Router {
         )
         .route("/api/v1/events", get(routes::events::list_events))
         .route("/api/v1/reports", post(routes::reports::create_report))
+        .route(
+            "/api/v1/bug-reports",
+            post(routes::bug_reports::create_bug_report)
+                // Route-level limit overrides the global 64 KiB (trace ≤ 1 MB).
+                .layer(DefaultBodyLimit::max(routes::bug_reports::BODY_LIMIT_BYTES)),
+        )
         .route("/api/v1/friends/request", post(routes::friends::send_request))
         .route("/api/v1/friends/respond", post(routes::friends::respond))
         .route("/api/v1/friends", get(routes::friends::list))

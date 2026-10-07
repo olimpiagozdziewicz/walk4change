@@ -13,7 +13,8 @@ import { LiveSocket, type ScoredPing, type LeaderRow } from '../lib/ws'
 import { watchPosition as watchGeoPosition, watchSteps, isNativeApp, needsLocationDisclosure, markLocationDisclosureAccepted, type GeoWatch, type StepWatch } from '../lib/geo'
 import { createStepGate, metersBetween, type StepGate, type LatLng } from '../lib/stepGate'
 import { createTraceRecorder, type TraceRecorder } from '../lib/walkTrace'
-import { deviceModel, shareWalkTrace } from '../lib/shareTrace'
+import { deviceModel, setLastWalkTrace } from '../lib/bugReport'
+import { BugReportModal } from '../components/BugReportModal'
 import { useStepCounter } from '../hooks/useStepCounter'
 import { addWalk } from '../lib/walks'
 import { api, type WalkDetailInfo, type RatingFlag } from '../lib/api'
@@ -144,8 +145,7 @@ export function Walk() {
   // Zapis spaceru do zgłoszenia błędu (spec 2026-10-07): surowe kroki i fixy,
   // odtwarzalne w testach przez tę samą bramkę. Żyje do „Nowy spacer”.
   const traceRef = useRef<TraceRecorder | null>(null)
-  const [traceNote, setTraceNote] = useState('')
-  const [traceState, setTraceState] = useState<'idle' | 'open' | 'sent' | 'error'>('idle')
+  const [bugOpen, setBugOpen] = useState(false)
 
   // Lustrzane refy dla finalizacji przy odmontowaniu (cleanup efektu [] widzi
   // domknięcie z pierwszego renderu — stan byłby przeterminowany, refy nie).
@@ -764,6 +764,7 @@ export function Walk() {
         photos: [],
       })
     }
+    setLastWalkTrace(traceRef.current?.snapshot() ?? null)
     clearActiveWalk()
     stopStreaming()
     // Podsumowanie jest liczone lokalnie — pokazujemy je od razu, a stop/leave
@@ -1068,47 +1069,14 @@ export function Walk() {
                   <ul className="mt-2 space-y-1">{leaderboard.slice(0, 5).map((r, i) => (<li key={r.user_id} className="flex items-center justify-between text-sm"><span className="text-ink">{i + 1}. {r.display_name}</span><span className="font-bold text-deep">{Math.round(parseFloat(r.total_points))}</span></li>))}</ul>
                 </Card>
               )}
-              {isNativeApp() && (traceRef.current?.size() ?? 0) > 0 && (
-                <Card className="mt-4 p-4">
-                  {traceState === 'idle' && (
-                    <button type="button" onClick={() => setTraceState('open')} className="w-full text-left text-sm font-bold text-muted underline-offset-2 hover:underline">
-                      Coś nie tak z krokami, pauzą albo trasą? Wyślij zapis spaceru
-                    </button>
-                  )}
-                  {traceState === 'open' && (
-                    <>
-                      <label htmlFor="trace-note" className="text-sm font-bold text-ink">Co się działo?</label>
-                      <textarea
-                        id="trace-note"
-                        value={traceNote}
-                        onChange={(e) => setTraceNote(e.target.value)}
-                        maxLength={500}
-                        rows={3}
-                        placeholder="np. pauza włączała się, choć szłam"
-                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm text-ink"
-                      />
-                      <p className="mt-2 text-xs text-muted">Zapis zawiera kroki, czasy i trasę jako przesunięcia w metrach, bez adresu i współrzędnych. Sama wybierasz, komu go wyślesz.</p>
-                      <SoftButton
-                        className="mt-3 w-full"
-                        onClick={() => {
-                          const rec = traceRef.current
-                          if (!rec) return
-                          shareWalkTrace(rec, traceNote).then(() => setTraceState('sent'), () => setTraceState('error'))
-                        }}
-                      >
-                        Wyślij zapis
-                      </SoftButton>
-                    </>
-                  )}
-                  {traceState === 'sent' && <p className="text-sm font-bold text-[#2f7a45]">Dzięki, z zapisem odtworzymy Twój spacer krok po kroku.</p>}
-                  {traceState === 'error' && <p className="text-sm text-rose-600">Nie udało się przygotować pliku. Spróbuj jeszcze raz po następnym spacerze.</p>}
-                </Card>
-              )}
+              <button type="button" onClick={() => setBugOpen(true)} className="mt-4 w-full text-center text-sm font-bold text-muted underline-offset-2 hover:underline">
+                Coś nie tak z krokami, pauzą albo trasą? Zgłoś błąd
+              </button>
+              {bugOpen && <BugReportModal screen="walk-summary" initialCategory="walk" onClose={() => setBugOpen(false)} />}
               <PrimaryButton
                 onClick={() => {
                   traceRef.current = null
-                  setTraceNote('')
-                  setTraceState('idle')
+                  setBugOpen(false)
                   setPhase('idle')
                 }}
                 className="mt-4 w-full"
